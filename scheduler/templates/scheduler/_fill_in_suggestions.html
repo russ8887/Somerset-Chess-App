@@ -1,0 +1,23 @@
+<h4>Fill-in Suggestions</h4>
+
+{% if suggestions %}
+    <ul style="list-style-type: none; padding-left: 0;">
+        {% for student in suggestions %}
+            <li style="margin-bottom: 0.5em;">
+                <button hx-post="{% url 'add-fill-in' lesson.pk student.pk %}"
+                        hx-target="#suggestions-{{ lesson.pk }}"
+                        hx-swap="outerHTML">
+                    Add
+                </button>
+                <strong>{{ student }}</strong> 
+                (Lessons this term: {{ student.lesson_count }}, Type: {{ student.primary_enrollment.get_enrollment_type_display }})
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p><em>No compatible fill-in students found.</em></p>
+{% endif %}
+
+<div id="roster-{{ lesson.pk }}" hx-swap-oob="true">
+    {% include "scheduler/_lesson_roster.html" %}
+</div>

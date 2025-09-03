@@ -1,0 +1,85 @@
+{% extends "admin/change_form.html" %}
+
+{% block field_sets %}
+    {# This renders the standard fields like Name, Coach, Term, etc. #}
+    {% for fieldset in adminform %}
+        {% include "admin/includes/fieldset.html" %}
+    {% endfor %}
+
+    {# This is our custom two-list selector for students #}
+    <fieldset class="module">
+        <h2>Members</h2>
+        <style>
+            .student-selector { display: flex; gap: 2em; }
+            .student-list-container { flex: 1; }
+            .student-list { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 5px; background-color: white; }
+            .student-list label { display: block; padding: 2px 5px; }
+            .student-list label:hover { background-color: #f0f8ff; }
+            .student-search-input { width: 98%; margin-bottom: 5px; padding: 4px; border: 1px solid #ccc; }
+        </style>
+
+        <div class="student-selector">
+            <div class="student-list-container">
+                <strong>Available Students</strong>
+                <input type="text" id="student-search" class="student-search-input" placeholder="Search for a student...">
+                <div id="available-students-list" class="student-list">
+                    {% for enrollment in available_enrollments %}
+                        <label><input type="checkbox" name="members" value="{{ enrollment.pk }}"> {{ enrollment.student }} ({{ enrollment.get_enrollment_type_display }})</label>
+                    {% empty %}
+                        <p style="padding: 10px; color: #666;">
+                            {% if request.GET.term %}
+                                No available students for this term.
+                            {% else %}
+                                Please select a Term to see available students.
+                            {% endif %}
+                        </p>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="student-list-container">
+                <strong>Students in this Group</strong>
+                <div class="student-list">
+                    {% for enrollment in scheduled_enrollments %}
+                        <label><input type="checkbox" name="members" value="{{ enrollment.pk }}" checked> {{ enrollment.student }} ({{ enrollment.get_enrollment_type_display }})</label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </fieldset>
+
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- Term selection logic ---
+            const termSelect = document.getElementById('id_term');
+            if (termSelect) {
+                termSelect.addEventListener('change', function() {
+                    const termId = this.value;
+                    if (termId) {
+                        const currentUrl = new URL(window.location.href);
+                        currentUrl.searchParams.set('term', termId);
+                        window.location.href = currentUrl.toString();
+                    }
+                });
+            }
+
+            // --- Live search logic ---
+            const searchInput = document.getElementById('student-search');
+            const studentList = document.getElementById('available-students-list');
+            const studentLabels = studentList.getElementsByTagName('label');
+
+            if (searchInput) {
+                searchInput.addEventListener('keyup', function() {
+                    const filter = searchInput.value.toUpperCase();
+                    for (let i = 0; i < studentLabels.length; i++) {
+                        const txtValue = studentLabels[i].textContent || studentLabels[i].innerText;
+                        if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                            studentLabels[i].style.display = "";
+                        } else {
+                            studentLabels[i].style.display = "none";
+                        }
+                    }
+                });
+            }
+        });
+    </script>
+{% endblock %}

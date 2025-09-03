@@ -1,0 +1,18 @@
+<p><strong>Students:</strong></p>
+<ul>
+    {% for record in lesson.get_attendance_records %}
+        <li>
+            {{ record.enrollment.student }} 
+            {% if record.status == 'FILL_IN' %}
+                <strong>(Fill-in)</strong>
+            {% endif %}
+            - 
+            <span id="status-{{ record.pk }}" style="display: inline-block;">
+                {% include "scheduler/_attendance_status.html" %}
+            </span>
+            <span id="note-{{ record.lessonnote.pk }}" style="display: inline-block; margin-left: 1em;">
+                {% include "scheduler/_lesson_note_display.html" with note=record.lessonnote %}
+            </span>
+        </li>
+    {% endfor %}
+</ul>

@@ -1,0 +1,42 @@
+<style>
+    .calendar { border-collapse: collapse; width: 100%; }
+    .calendar th, .calendar td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    .calendar th { background-color: #f2f2f2; }
+    .calendar .today { background-color: #e6ffe6; font-weight: bold; }
+    .calendar .noday { background-color: #fafafa; }
+    .calendar a { color: #007bff; text-decoration: none; }
+    .calendar-nav { display: flex; justify-content: space-between; align-items: center; }
+</style>
+
+<div class="calendar-nav">
+    <a href="?date={{ prev_month_date|date:'Y-m-d' }}{% if selected_coach_id != user.coach.id %}&coach={{ selected_coach_id }}{% endif %}">&laquo;</a>
+    <h4>{{ view_date|date:"F Y" }}</h4>
+    <a href="?date={{ next_month_date|date:'Y-m-d' }}{% if selected_coach_id != user.coach.id %}&coach={{ selected_coach_id }}{% endif %}">&raquo;</a>
+</div>
+
+<table class="calendar">
+    <thead>
+        <tr>
+            <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for week in calendar %}
+        <tr>
+            {% for day in week %}
+                {% if day == 0 %}
+                    <td class="noday">&nbsp;</td>
+                {% else %}
+                    {% with day_str=day|stringformat:"02d" %}
+                    {% with day_date=view_date|date:"Y-m-"|add:day_str %}
+                        <td class="{% if day_date == today|date:'Y-m-d' %}today{% endif %}">
+                            <a href="?date={{ day_date }}{% if selected_coach_id != user.coach.id %}&coach={{ selected_coach_id }}{% endif %}">{{ day }}</a>
+                        </td>
+                    {% endwith %}
+                    {% endwith %}
+                {% endif %}
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

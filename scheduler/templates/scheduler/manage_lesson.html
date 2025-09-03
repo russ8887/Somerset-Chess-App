@@ -1,0 +1,190 @@
+{% extends "scheduler/base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h2>Manage Attendance</h2>
+            <h4>{{ lesson.scheduled_group.name }}</h4>
+            <p class="mb-0">{{ lesson.lesson_date|date:"l, F j, Y" }} at {{ lesson.scheduled_group.time_slot }}</p>
+        </div>
+        <div class="card-body">
+            <h5 class="card-title">Current Students</h5>
+            <div class="table-responsive mb-4">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in current_records %}
+                        <tr>
+                            <td>{{ record.enrollment.student }}</td>
+                            <td>
+                                <span class="badge {% if record.status == 'PRESENT' %}bg-success{% elif record.status == 'ABSENT' %}bg-danger{% elif record.status == 'FILL_IN' %}bg-info{% else %}bg-secondary{% endif %}">{{ record.get_status_display }}</span>
+                            </td>
+                            <td>
+                                {% if record.status == 'FILL_IN' %}
+                                    <form method="post" style="display: inline;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="remove_record_pk" value="{{ record.pk }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">Remove</button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3">No students are currently in this lesson.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <hr>
+
+            <h5 class="card-title">Add Fill-in Student</h5>
+            
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <input type="text" id="student-search" class="form-control" style="max-width: 300px;" placeholder="Type to search for a student..." autofocus>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-secondary" id="filter-suggested">Show Suggested</button>
+                    <button type="button" class="btn btn-primary active" id="filter-all">Show All</button>
+                </div>
+            </div>
+
+            <div class="list-group" id="student-list" style="max-height: 300px; overflow-y: auto;">
+                {% for enrollment in all_candidates %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center" 
+                         data-is-suggested="{{ enrollment.is_suggested|yesno:'true,false' }}"
+                         data-student-name="{{ enrollment.student|lower }}">
+                        <span>
+                            {{ enrollment.student }} - ({{ enrollment.get_enrollment_type_display }})
+                            {% if enrollment.is_suggested %}
+                                <span class="badge bg-success">Suggested</span>
+                            {% else %}
+                                <span class="badge bg-warning">Override</span>
+                            {% endif %}
+                            <span class="badge bg-{{ enrollment.progress_color|default:'secondary' }} ms-1">
+                                {{ enrollment.lesson_count }} lessons
+                            </span>
+                        </span>
+                        <form method="post" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="add_enrollment_pk" value="{{ enrollment.pk }}">
+                            <button type="submit" class="btn btn-success btn-sm">Add</button>
+                        </form>
+                    </div>
+                {% empty %}
+                    <div class="list-group-item">No other students found for this term.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card-footer text-end">
+            <a href="{% url 'dashboard' %}?date={{ lesson.lesson_date|date:'Y-m-d' }}&coach={{ lesson.scheduled_group.coach.pk }}" class="btn btn-secondary">
+                &larr; Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+{# The script is now directly inside the content block to ensure it loads #}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('Manage Lesson script loading...');
+
+        const searchInput = document.getElementById('student-search');
+        const studentList = document.getElementById('student-list');
+        const students = studentList ? studentList.querySelectorAll('.list-group-item') : [];
+        const btnSuggested = document.getElementById('filter-suggested');
+        const btnAll = document.getElementById('filter-all');
+
+        console.log('Elements found:', {
+            searchInput: !!searchInput,
+            studentList: !!studentList,
+            studentsCount: students.length,
+            btnSuggested: !!btnSuggested,
+            btnAll: !!btnAll
+        });
+
+    let currentFilter = 'all';
+
+        function applyFilters() {
+            console.log('applyFilters called, currentFilter:', currentFilter);
+            const query = searchInput ? searchInput.value.toLowerCase() : '';
+            console.log('Search query:', query);
+
+            students.forEach(function(student, index) {
+                const isSuggested = student.dataset.isSuggested === 'true';
+                const name = student.dataset.studentName || '';
+
+                console.log(`Student ${index}:`, {
+                    name: name,
+                    isSuggested: isSuggested,
+                    dataset: student.dataset
+                });
+
+                const matchesFilter = (currentFilter === 'all') || (currentFilter === 'suggested' && isSuggested);
+                const matchesSearch = name.includes(query);
+
+                console.log(`Student ${index} matches:`, {
+                    matchesFilter: matchesFilter,
+                    matchesSearch: matchesSearch,
+                    willShow: matchesFilter && matchesSearch
+                });
+
+                if (matchesFilter && matchesSearch) {
+                    student.classList.remove('d-none');
+                } else {
+                    student.classList.add('d-none');
+                }
+            });
+        }
+
+        if (searchInput) {
+            console.log('Attaching search event listener');
+            searchInput.addEventListener('keyup', function() {
+                console.log('Search keyup event');
+                applyFilters();
+            });
+
+            if (btnSuggested) {
+                console.log('Attaching suggested button listener');
+                btnSuggested.addEventListener('click', function() {
+                    console.log('Suggested button clicked');
+                    currentFilter = 'suggested';
+                    btnSuggested.classList.add('active', 'btn-primary');
+                    btnSuggested.classList.remove('btn-secondary');
+                    btnAll.classList.remove('active', 'btn-primary');
+                    btnAll.classList.add('btn-secondary');
+                    applyFilters();
+                });
+            }
+
+            if (btnAll) {
+                console.log('Attaching all button listener');
+                btnAll.addEventListener('click', function() {
+                    console.log('All button clicked');
+                    currentFilter = 'all';
+                    btnAll.classList.add('active', 'btn-primary');
+                    btnAll.classList.remove('btn-secondary');
+                    btnSuggested.classList.remove('active', 'btn-primary');
+                    btnSuggested.classList.add('btn-secondary');
+                    applyFilters();
+                });
+            }
+
+            // Apply the default filter on page load
+            console.log('Applying default filter on load');
+            applyFilters();
+        } else {
+            console.error('Search input not found!');
+        }
+    });
+</script>
+{% endblock %}

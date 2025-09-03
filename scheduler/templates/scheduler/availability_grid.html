@@ -1,0 +1,54 @@
+{% extends "scheduler/base.html" %}
+{% load scheduler_extras %}
+
+{% block content %}
+    <h2>Manage Class Unavailability</h2>
+    <p>Select a class to view or edit its recurring weekly unavailability. Check a box to mark a time slot as unavailable for that class.</p>
+
+    <form method="GET">
+        <label for="class-select">Select a School Class:</label>
+        <select name="class_id" id="class-select" onchange="this.form.submit()">
+            <option value="">--- Select a Class ---</option>
+            {% for class in all_classes %}
+                <option value="{{ class.pk }}" {% if class.pk == selected_class.pk %}selected{% endif %}>
+                    {{ class.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </form>
+    <hr>
+
+    {% if selected_class %}
+        <h3>Editing Unavailability for: {{ selected_class.name }}</h3>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="school_class" value="{{ selected_class.pk }}">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Time Slot</th>
+                        {% for index, day_name in days %}
+                            <th>{{ day_name }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for slot in time_slots %}
+                        <tr>
+                            <td>{{ slot }}</td>
+                            {% for index, day_name in days %}
+                                <td style="text-align: center;">
+                                    {# This line now uses our new, safer tag #}
+                                    <input type="checkbox" name="slot_{{ slot.pk }}_{{ index }}"
+                                           {% is_checked availability_map slot.pk index %}>
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <br>
+            <button type="submit">Save Changes for {{ selected_class.name }}</button>
+        </form>
+    {% endif %}
+{% endblock %}

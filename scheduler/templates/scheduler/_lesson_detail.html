@@ -1,0 +1,98 @@
+<div id="lesson-{{ lesson.pk }}" hx-target="this" hx-swap="outerHTML">
+
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-0">{{ lesson.scheduled_group.name }}</h5>
+                <small class="text-muted">{{ lesson.scheduled_group.time_slot }}</small>
+            </div>
+            <a href="{% url 'manage-lesson' lesson.pk %}" class="btn btn-outline-primary btn-sm">
+                Manage / Find Fill-in
+            </a>
+        </div>
+        <ul class="list-group list-group-flush">
+            {% for record in lesson.attendancerecord_set.all %}
+            <li class="list-group-item" id="student-row-{{ record.pk }}">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <a href="#"
+                       hx-get="{% url 'student-report' record.enrollment.student.pk lesson.scheduled_group.term.pk %}"
+                       hx-target="#report-content"
+                       class="student-link fw-bold text-dark text-decoration-none">
+                        {{ record.enrollment.student }}
+                        <small class="text-muted">({{ record.enrollment.get_enrollment_type_display }})</small>
+                        {% if record.status == 'FILL_IN' %}
+                            <span class="badge bg-info">Fill-in</span>
+                        {% endif %}
+                    </a>
+                </div>
+
+                <div class="controls d-flex flex-wrap align-items-center gap-2">
+                    {% if record.status == 'PRESENT' or record.status == 'FILL_IN' %}
+                        <button class="btn btn-sm btn-success fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
+                            <i class="bi bi-check-circle-fill me-1"></i>{{ record.get_status_display }}
+                        </button>
+                    {% elif record.status == 'ABSENT' %}
+                        <button class="btn btn-sm btn-danger fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
+                            <i class="bi bi-x-circle-fill me-1"></i>Absent
+                        </button>
+
+                        {% if record.reason_for_absence %}
+                            <span class="badge bg-light text-dark ms-2">{{ record.get_reason_for_absence_display }}</span>
+                        {% else %}
+                            <div class="reason-buttons d-flex gap-1 mt-1">
+                            {% for reason_code, reason_display in record.get_absence_reasons %}
+                                <button class="btn btn-xs btn-outline-secondary" hx-post="{% url 'save-reason' record.pk reason_code %}" title="Mark as {{ reason_display }}">{{ reason_display }}</button>
+                            {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% else %} {# Status is PENDING #}
+                        <button class="btn btn-sm btn-outline-success fw-semibold" hx-post="{% url 'mark-attendance' record.pk 'PRESENT' %}">
+                            <i class="bi bi-check-circle me-1"></i>Present
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger fw-semibold" hx-post="{% url 'mark-attendance' record.pk 'ABSENT' %}">
+                            <i class="bi bi-x-circle me-1"></i>Absent
+                        </button>
+                    {% endif %}
+
+                    {# --- Notes Button Logic --- #}
+                    {% if record.lessonnote %}
+                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'edit-note' record.lessonnote.pk %}">
+                            <i class="bi bi-journal-text me-1"></i>Notes
+                        </button>
+                    {% else %}
+                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'create-note' record.pk %}">
+                            <i class="bi bi-plus-circle me-1"></i>Add Note
+                        </button>
+                    {% endif %}
+                </div>
+
+                {# --- Note Editing Form (only appears when editing) --- #}
+                {% if editing_note_id == record.lessonnote.id %}
+                <div class="note-form-container mt-3">
+                    <form hx-post="{% url 'edit-note' record.lessonnote.pk %}" class="note-form">
+                        {% csrf_token %}
+                        {{ note_form.as_p }}
+                        
+                        <div class="mb-2">
+                            <button type="submit" class="btn btn-primary btn-sm">Save Note</button>
+                            <button type="button" class="btn btn-secondary btn-sm" hx-get="{% url 'view-note' record.lessonnote.pk %}">Cancel</button>
+                        </div>
+                    </form>
+                    <div class="prefilled-notes">
+                        <small>Quick Add:</small>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_topics_covered', 'Opening principles')">Opening</button>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_topics_covered', 'Endgame practice')">Endgame</button>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_coach_comments', 'Good focus')">Good focus</button>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_coach_comments', 'Needs review')">Needs review</button>
+                    </div>
+                </div>
+                {% endif %}
+            </li>
+            {% empty %}
+            <li class="list-group-item text-muted">
+                No students are scheduled for this lesson.
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>

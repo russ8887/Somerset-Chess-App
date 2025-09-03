@@ -1,0 +1,10 @@
+<button class="status absent" 
+        hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" 
+        hx-target="#status-{{ record.pk }}" 
+        hx-swap="innerHTML"
+        title="Click to undo">
+    Absent
+</button>
+{% if record.reason_for_absence %}
+    <em>({{ record.reason_for_absence }})</em>
+{% endif %}
