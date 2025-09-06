@@ -12,16 +12,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- Core Security Settings ---
 
-# The SECRET_KEY is now read exclusively from an environment variable.
-# Your development key is in your .env file, and Render provides the production one.
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
-# DEBUG is False in production and True in development based on the environment variable.
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-# ALLOWED_HOSTS is configured to read from an environment variable.
-# Render will use `your-app-name.onrender.com`. For local, it's `127.0.0.1`.
+# UPDATED: More robust ALLOWED_HOSTS for Render
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '127.0.0.1').split(' ')
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
+# ADDED: Required security setting for production
+CSRF_TRUSTED_ORIGINS = [f"https://{RENDER_EXTERNAL_HOSTNAME}"] if RENDER_EXTERNAL_HOSTNAME else []
 
 
 # --- Application Definition ---
@@ -38,7 +40,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    # ADDED: WhiteNoise middleware for serving static files efficiently.
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -70,9 +71,6 @@ WSGI_APPLICATION = 'somerset_project.wsgi.application'
 
 # --- Database Configuration ---
 
-# UPDATED: Simplified database configuration using dj-database-url.
-# It will use the DATABASE_URL from Render in production, or the default
-# value for local development if the variable isn't set.
 DATABASES = {
     'default': dj_database_url.parse(
         os.environ.get('DATABASE_URL', 'postgresql://somerset_user:Clashofclans8@localhost:5432/somerset_chess')
@@ -98,23 +96,26 @@ USE_I18N = True
 USE_TZ = True
 
 
-# --- Static and Media Files ---
+# --- Static Files (CSS, JavaScript, Images) ---
 
 STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
-
-# This is where static files will be collected for production.
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# ADDED: This tells Django to use WhiteNoise to handle static files.
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# UPDATED: This is the modern and correct way to configure WhiteNoise.
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 
 # --- Security Settings for Production ---
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_BROWSER_XSS_FILTER = True
+    # SECURE_BROWSER_XSS_FILTER is deprecated and removed
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
     SECURE_HSTS_SECONDS = 31536000
