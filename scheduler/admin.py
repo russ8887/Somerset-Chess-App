@@ -43,24 +43,36 @@ class ScheduledGroupAdmin(admin.ModelAdmin):
 
     def change_view(self, request, object_id, form_url='', extra_context=None):
         """Override change_view to provide context for custom template"""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"ScheduledGroupAdmin change_view called with object_id: {object_id}")
+
         extra_context = extra_context or {}
         extra_context['request'] = request  # Add request to template context
+        logger.info("Added request to extra_context")
 
         # Get the scheduled group object
         try:
             obj = self.get_object(request, object_id)
-        except:
+            logger.info(f"Retrieved object: {obj}")
+        except Exception as e:
+            logger.error(f"Error getting object: {e}")
             obj = None
 
         # Get term from request parameters (set by JavaScript in template)
         term_id = request.GET.get('term')
+        logger.info(f"Term ID from request: {term_id}")
+
         if term_id:
             try:
                 from .models import Term, Enrollment
+                logger.info("Importing models successful")
                 term = Term.objects.get(pk=term_id)
+                logger.info(f"Found term: {term}")
 
                 # Get all enrollments for this term
                 term_enrollments = Enrollment.objects.filter(term=term)
+                logger.info(f"Found {term_enrollments.count()} enrollments for term")
 
                 if obj:
                     # Available enrollments: those in the term but not in this group
@@ -69,21 +81,36 @@ class ScheduledGroupAdmin(admin.ModelAdmin):
                     )
                     # Scheduled enrollments: current members of this group
                     extra_context['scheduled_enrollments'] = obj.members.all()
+                    logger.info(f"Set context for existing object: {len(extra_context['available_enrollments'])} available, {len(extra_context['scheduled_enrollments'])} scheduled")
                 else:
                     # For new objects, all term enrollments are available
                     extra_context['available_enrollments'] = term_enrollments
                     extra_context['scheduled_enrollments'] = Enrollment.objects.none()
+                    logger.info(f"Set context for new object: {len(extra_context['available_enrollments'])} available")
 
-            except (Term.DoesNotExist, ValueError):
+            except (Term.DoesNotExist, ValueError) as e:
+                logger.error(f"Term error: {e}")
                 # If term doesn't exist or invalid, show empty querysets
+                extra_context['available_enrollments'] = Enrollment.objects.none()
+                extra_context['scheduled_enrollments'] = Enrollment.objects.none()
+            except Exception as e:
+                logger.error(f"Unexpected error in term processing: {e}")
                 extra_context['available_enrollments'] = Enrollment.objects.none()
                 extra_context['scheduled_enrollments'] = Enrollment.objects.none()
         else:
             # No term selected yet
+            logger.info("No term selected")
             extra_context['available_enrollments'] = Enrollment.objects.none()
             extra_context['scheduled_enrollments'] = Enrollment.objects.none()
 
-        return super().change_view(request, object_id, form_url, extra_context)
+        logger.info("About to call super().change_view")
+        try:
+            result = super().change_view(request, object_id, form_url, extra_context)
+            logger.info("super().change_view completed successfully")
+            return result
+        except Exception as e:
+            logger.error(f"Error in super().change_view: {e}")
+            raise
 
 # --- Configuration for the Attendance Record Admin ---
 @admin.register(AttendanceRecord)
