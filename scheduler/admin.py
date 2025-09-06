@@ -41,6 +41,49 @@ class ScheduledGroupAdmin(admin.ModelAdmin):
     search_fields = ('name', 'coach__user__first_name', 'coach__user__last_name')
     filter_horizontal = ('members',) # Makes selecting students much easier
 
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """Override change_view to provide context for custom template"""
+        extra_context = extra_context or {}
+
+        # Get the scheduled group object
+        try:
+            obj = self.get_object(request, object_id)
+        except:
+            obj = None
+
+        # Get term from request parameters (set by JavaScript in template)
+        term_id = request.GET.get('term')
+        if term_id:
+            try:
+                from .models import Term, Enrollment
+                term = Term.objects.get(pk=term_id)
+
+                # Get all enrollments for this term
+                term_enrollments = Enrollment.objects.filter(term=term)
+
+                if obj:
+                    # Available enrollments: those in the term but not in this group
+                    extra_context['available_enrollments'] = term_enrollments.exclude(
+                        pk__in=obj.members.values_list('pk', flat=True)
+                    )
+                    # Scheduled enrollments: current members of this group
+                    extra_context['scheduled_enrollments'] = obj.members.all()
+                else:
+                    # For new objects, all term enrollments are available
+                    extra_context['available_enrollments'] = term_enrollments
+                    extra_context['scheduled_enrollments'] = Enrollment.objects.none()
+
+            except (Term.DoesNotExist, ValueError):
+                # If term doesn't exist or invalid, show empty querysets
+                extra_context['available_enrollments'] = Enrollment.objects.none()
+                extra_context['scheduled_enrollments'] = Enrollment.objects.none()
+        else:
+            # No term selected yet
+            extra_context['available_enrollments'] = Enrollment.objects.none()
+            extra_context['scheduled_enrollments'] = Enrollment.objects.none()
+
+        return super().change_view(request, object_id, form_url, extra_context)
+
 # --- Configuration for the Attendance Record Admin ---
 @admin.register(AttendanceRecord)
 class AttendanceRecordAdmin(admin.ModelAdmin):
