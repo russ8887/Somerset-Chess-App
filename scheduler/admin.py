@@ -44,6 +44,7 @@ class ScheduledGroupAdmin(admin.ModelAdmin):
     def change_view(self, request, object_id, form_url='', extra_context=None):
         """Override change_view to provide context for custom template"""
         extra_context = extra_context or {}
+        extra_context['request'] = request  # Add request to template context
 
         # Get the scheduled group object
         try:
