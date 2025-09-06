@@ -1,16 +1,14 @@
-"""
-WSGI config for somerset_project project.
-
-It exposes the WSGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
-"""
+# somerset_project/wsgi.py
 
 import os
-
 from django.core.wsgi import get_wsgi_application
+
+# ADD this import at the top
+from whitenoise import WhiteNoise
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'somerset_project.settings')
 
 application = get_wsgi_application()
+
+# ADD this line to wrap the application with WhiteNoise
+application = WhiteNoise(application)
