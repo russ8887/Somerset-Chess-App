@@ -15,8 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # More robust SECRET_KEY handling with fallback
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-temporary-key-for-debugging-only')
 
-# Restore normal DEBUG setting
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+# Restore normal DEBUG setting - default to False for production
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 # Restore proper ALLOWED_HOSTS handling
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '127.0.0.1 localhost').split(' ')
@@ -105,15 +105,21 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# Temporarily use simpler static files storage for debugging
+# Add directories where Django will look for static files
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+]
+
+# Use WhiteNoise for static file serving in production
 STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
     },
 }
 
-# Alternative: If above still fails, we can fall back to basic WhiteNoise
-# STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# WhiteNoise configuration for better static file handling
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = True
 
 
 # --- Security Settings for Production ---
