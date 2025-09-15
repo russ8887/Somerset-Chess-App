@@ -29,14 +29,31 @@ class CSVImportForm(forms.Form):
             
             # Check if file has required columns
             reader = csv.DictReader(io.StringIO(content))
-            required_columns = ['first_name', 'last_name', 'school_class', 'year_level', 'enrollment_type']
             
             if not reader.fieldnames:
                 raise ValidationError('CSV file appears to be empty or invalid.')
             
-            missing_columns = [col for col in required_columns if col not in reader.fieldnames]
-            if missing_columns:
-                raise ValidationError(f'CSV file is missing required columns: {", ".join(missing_columns)}')
+            # Check for either format
+            old_format_columns = ['first_name', 'last_name', 'school_class', 'year_level', 'enrollment_type']
+            new_format_columns = ['Group of:', 'STUDENTS_nameandclass']
+            
+            # Convert fieldnames to lowercase for case-insensitive comparison
+            fieldnames_lower = [field.lower() for field in reader.fieldnames]
+            
+            # Check if it's the old format
+            old_format_missing = [col for col in old_format_columns if col.lower() not in fieldnames_lower]
+            is_old_format = len(old_format_missing) == 0
+            
+            # Check if it's the new format
+            new_format_missing = [col for col in new_format_columns if col.lower() not in fieldnames_lower]
+            is_new_format = len(new_format_missing) == 0
+            
+            if not is_old_format and not is_new_format:
+                raise ValidationError(
+                    f'CSV file format not recognized. Please use either:\n'
+                    f'Format 1: {", ".join(old_format_columns)}\n'
+                    f'Format 2: {", ".join(new_format_columns)}'
+                )
                 
         except UnicodeDecodeError:
             raise ValidationError('File encoding error. Please save your CSV file with UTF-8 encoding.')
