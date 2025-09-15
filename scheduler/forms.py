@@ -1,6 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import Term
+from .models import Term, LessonNote
 import csv
 import io
 
@@ -46,8 +46,6 @@ class CSVImportForm(forms.Form):
         return csv_file
 
 class LessonNoteForm(forms.ModelForm):
-    from .models import LessonNote
-    
     class Meta:
         model = LessonNote
         fields = ['student_understanding', 'topics_covered', 'coach_comments']
