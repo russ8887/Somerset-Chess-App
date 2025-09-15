@@ -27,36 +27,43 @@ class CSVImportForm(forms.Form):
             content = csv_file.read().decode('utf-8-sig')
             csv_file.seek(0)  # Reset file pointer
             
-            # Check if file has required columns
-            reader = csv.DictReader(io.StringIO(content))
+            # Check if file has content
+            if not content.strip():
+                raise ValidationError('CSV file appears to be empty.')
             
-            if not reader.fieldnames:
-                raise ValidationError('CSV file appears to be empty or invalid.')
+            # Try to detect format by reading the first line
+            lines = content.strip().split('\n')
+            if not lines:
+                raise ValidationError('CSV file appears to be empty.')
             
-            # Check for either format
-            old_format_columns = ['first_name', 'last_name', 'school_class', 'year_level', 'enrollment_type']
-            new_format_columns = ['Group of:', 'STUDENTS_nameandclass']
+            header_line = lines[0].lower()
+            print(f"DEBUG: CSV header line: {header_line}")
             
-            # Convert fieldnames to lowercase for case-insensitive comparison
-            fieldnames_lower = [field.lower() for field in reader.fieldnames]
+            # Detect format based on headers - be more flexible
+            is_new_format = 'group of' in header_line and ('students_nameandclass' in header_line or 'nameandclass' in header_line)
+            is_old_format = 'first_name' in header_line and 'last_name' in header_line
             
-            # Check if it's the old format
-            old_format_missing = [col for col in old_format_columns if col.lower() not in fieldnames_lower]
-            is_old_format = len(old_format_missing) == 0
-            
-            # Check if it's the new format
-            new_format_missing = [col for col in new_format_columns if col.lower() not in fieldnames_lower]
-            is_new_format = len(new_format_missing) == 0
+            print(f"DEBUG: is_new_format: {is_new_format}, is_old_format: {is_old_format}")
             
             if not is_old_format and not is_new_format:
-                raise ValidationError(
-                    f'CSV file format not recognized. Please use either:\n'
-                    f'Format 1: {", ".join(old_format_columns)}\n'
-                    f'Format 2: {", ".join(new_format_columns)}'
-                )
+                # Try to parse as CSV to get actual fieldnames
+                try:
+                    reader = csv.DictReader(io.StringIO(content))
+                    fieldnames = reader.fieldnames or []
+                    print(f"DEBUG: Actual fieldnames: {fieldnames}")
+                    
+                    raise ValidationError(
+                        f'CSV file format not recognized. Found columns: {", ".join(fieldnames)}\n'
+                        f'Expected Format 1: first_name, last_name, school_class, year_level, enrollment_type\n'
+                        f'Expected Format 2: Group of:, STUDENTS_nameandclass'
+                    )
+                except:
+                    raise ValidationError('CSV file format not recognized and cannot parse headers.')
                 
         except UnicodeDecodeError:
             raise ValidationError('File encoding error. Please save your CSV file with UTF-8 encoding.')
+        except ValidationError:
+            raise  # Re-raise validation errors
         except Exception as e:
             raise ValidationError(f'Error reading CSV file: {str(e)}')
         

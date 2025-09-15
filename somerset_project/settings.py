@@ -15,8 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # More robust SECRET_KEY handling with fallback
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-temporary-key-for-debugging-only')
 
-# Restore normal DEBUG setting - default to False for production
-DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+# Restore normal DEBUG setting - default to True for development
+DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 # Restore proper ALLOWED_HOSTS handling
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '127.0.0.1 localhost').split(' ')

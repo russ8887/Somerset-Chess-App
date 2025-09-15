@@ -52,7 +52,12 @@ def extract_year_level_from_class(school_class):
 def import_students_csv(request):
     if request.method == 'POST':
         form = CSVImportForm(request.POST, request.FILES)
+        print(f"DEBUG: Form submitted. Files: {request.FILES}")
+        print(f"DEBUG: Form data: {request.POST}")
+        print(f"DEBUG: Form errors: {form.errors}")
+        
         if form.is_valid():
+            print("DEBUG: Form is valid - proceeding with import")
             csv_file = form.cleaned_data['csv_file']
             term = form.cleaned_data['term']
             
@@ -238,7 +243,15 @@ def import_students_csv(request):
                     
             except Exception as e:
                 messages.error(request, f'Error processing CSV file: {str(e)}')
+        else:
+            # Form is NOT valid - this is likely why it was failing silently
+            print("DEBUG: Form is NOT valid!")
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f'{field}: {error}')
+            print(f"DEBUG: Rendering form with errors: {form.errors}")
     else:
+        print("DEBUG: GET request - showing empty form")
         form = CSVImportForm()
     
     return render(request, 'admin/csv_import.html', {
