@@ -50,6 +50,11 @@ class StudentAdmin(admin.ModelAdmin):
     list_display = ('last_name', 'first_name', 'year_level', 'school_class')
     list_filter = ('year_level', 'school_class')
     search_fields = ('first_name', 'last_name')
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['import_csv_url'] = '/admin/import-students/'
+        return super().changelist_view(request, extra_context=extra_context)
 
 # --- Configuration for the Scheduled Group Admin ---
 @admin.register(ScheduledGroup)

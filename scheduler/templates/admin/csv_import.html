@@ -1,0 +1,96 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; <a href="{% url 'admin:scheduler_student_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+&rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="module aligned">
+    <h1>{{ title }}</h1>
+    
+    <div class="form-row">
+        <div class="help">
+            <h3>📋 CSV Import Instructions</h3>
+            <p>Upload a CSV file to import students and automatically create their enrollments.</p>
+            
+            <h4>Required CSV Columns:</h4>
+            <ul>
+                <li><strong>first_name</strong> - Student's first name</li>
+                <li><strong>last_name</strong> - Student's last name</li>
+                <li><strong>school_class</strong> - Class name (e.g., "4G", "5P") - will be created if it doesn't exist</li>
+                <li><strong>year_level</strong> - Year level as a number (e.g., 4, 5, 6)</li>
+                <li><strong>enrollment_type</strong> - Lesson type: 1=Solo, 2=Pair, 3=Group</li>
+            </ul>
+            
+            <p>
+                <a href="{% url 'admin:download_csv_template' %}" class="button default">
+                    📥 Download CSV Template
+                </a>
+            </p>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="module aligned">
+        {% csrf_token %}
+        
+        <div class="form-row">
+            <div>
+                <label for="{{ form.term.id_for_label }}" class="required">{{ form.term.label }}:</label>
+                {{ form.term }}
+                {% if form.term.help_text %}
+                    <p class="help">{{ form.term.help_text }}</p>
+                {% endif %}
+                {% if form.term.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.term.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div>
+                <label for="{{ form.csv_file.id_for_label }}" class="required">{{ form.csv_file.label }}:</label>
+                {{ form.csv_file }}
+                {% if form.csv_file.help_text %}
+                    <p class="help">{{ form.csv_file.help_text }}</p>
+                {% endif %}
+                {% if form.csv_file.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.csv_file.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="submit-row">
+            <input type="submit" value="Import Students" class="default" />
+            <a href="{% url 'admin:scheduler_student_changelist' %}" class="button cancel-link">Cancel</a>
+        </div>
+    </form>
+
+    <div class="form-row">
+        <div class="help">
+            <h4>⚠️ Important Notes:</h4>
+            <ul>
+                <li>Students with the same first and last name will be updated, not duplicated</li>
+                <li>School classes will be created automatically if they don't exist</li>
+                <li>Enrollments will only be created once per student per term</li>
+                <li>Make sure your CSV file is saved with UTF-8 encoding</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
