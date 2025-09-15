@@ -19,15 +19,23 @@
     <div class="form-row">
         <div class="help">
             <h3>📋 CSV Import Instructions</h3>
-            <p>Upload a CSV file to import students and automatically create their enrollments.</p>
+            <p>Upload a CSV file to import students and automatically create their enrollments. The system supports two CSV formats:</p>
             
-            <h4>Required CSV Columns:</h4>
+            <h4>Format 1 - Standard Format:</h4>
             <ul>
                 <li><strong>first_name</strong> - Student's first name</li>
                 <li><strong>last_name</strong> - Student's last name</li>
-                <li><strong>school_class</strong> - Class name (e.g., "4G", "5P") - will be created if it doesn't exist</li>
+                <li><strong>school_class</strong> - Class name (e.g., "4G", "5P")</li>
                 <li><strong>year_level</strong> - Year level as a number (e.g., 4, 5, 6)</li>
                 <li><strong>enrollment_type</strong> - Lesson type: 1=Solo, 2=Pair, 3=Group</li>
+            </ul>
+            
+            <h4>Format 2 - Name & Class Format:</h4>
+            <ul>
+                <li><strong>Group of:</strong> - Enrollment type (1=Solo, 2=Pair, 3=Group)</li>
+                <li><strong>STUDENTS_nameandclass</strong> - Format: "FirstName LastName (ClassCode)-EnrollmentType"</li>
+                <li>Example: "3,Emmanuel Puljich (1C)-3" means Group lesson for Emmanuel Puljich in class 1C</li>
+                <li>Supports "Prep" classes (treated as year level 0)</li>
             </ul>
             
             <p>
