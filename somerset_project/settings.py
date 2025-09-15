@@ -214,18 +214,17 @@ JAZZMIN_SETTINGS = {
 
     # Links to put along the top menu
     "topmenu_links": [
+        # Prominent link back to the main schedule page
+        {"name": "📅 Back to Schedule", "url": "/", "new_window": False},
 
         # Url that gets reversed (Permissions can be added)
-        {"name": "Home",  "url": "admin:index", "permissions": ["auth.view_user"]},
-
-        # external url that opens in a new window (Permissions can be added)
-        {"name": "Support", "url": "https://github.com/russ8887/Somerset-Chess-App", "new_window": True},
-
-        # model admin to link to (Permissions checked against model)
-        {"model": "auth.User"},
+        {"name": "Admin Home",  "url": "admin:index", "permissions": ["auth.view_user"]},
 
         # App with dropdown menu to all its models pages (Permissions checked against models)
         {"app": "scheduler"},
+
+        # external url that opens in a new window (Permissions can be added)
+        {"name": "Support", "url": "https://github.com/russ8887/Somerset-Chess-App", "new_window": True},
     ],
 
     #############
@@ -260,9 +259,9 @@ JAZZMIN_SETTINGS = {
     # Custom links to append to app groups, keyed on app name
     "custom_links": {
         "scheduler": [{
-            "name": "View Site", 
+            "name": "📅 Back to Schedule Dashboard", 
             "url": "/", 
-            "icon": "fas fa-eye",
+            "icon": "fas fa-calendar-check",
             "permissions": ["scheduler.view_student"]
         }]
     },
