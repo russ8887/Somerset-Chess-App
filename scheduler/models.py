@@ -24,6 +24,10 @@ class TimeSlot(models.Model):
 class SchoolClass(models.Model):
     name = models.CharField(max_length=20, unique=True, help_text="e.g., 4G, 5P")
 
+    class Meta:
+        verbose_name = "School Class"
+        verbose_name_plural = "School Classes"
+
     def __str__(self):
         return self.name
 
@@ -33,6 +37,10 @@ class Coach(models.Model):
     
     # REMOVED: first_name, last_name, and email to avoid duplicating data from the User model.
     # We will now pull this information directly from the linked user.
+
+    class Meta:
+        verbose_name = "Coach"
+        verbose_name_plural = "Coaches"
 
     def __str__(self):
         # Pulls the name directly from the linked User model for a single source of truth.
@@ -94,6 +102,10 @@ class ScheduledUnavailability(models.Model):
     school_classes = models.ManyToManyField(SchoolClass, blank=True)
     day_of_week = models.IntegerField(choices=ScheduledGroup.DayOfWeek.choices)
     time_slot = models.ForeignKey(TimeSlot, on_delete=models.CASCADE, null=True)
+
+    class Meta:
+        verbose_name = "Scheduled Unavailability"
+        verbose_name_plural = "Scheduled Unavailabilities"
 
     def __str__(self):
         return self.name

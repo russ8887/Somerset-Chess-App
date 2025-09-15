@@ -6,6 +6,24 @@ from .models import (
     ScheduledGroup, ScheduledUnavailability, LessonSession, AttendanceRecord, LessonNote
 )
 
+# --- Configuration for Basic Models ---
+@admin.register(Term)
+class TermAdmin(admin.ModelAdmin):
+    list_display = ('name', 'start_date', 'end_date')
+    list_filter = ('start_date', 'end_date')
+    ordering = ('-start_date',)
+
+@admin.register(TimeSlot)
+class TimeSlotAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'start_time', 'end_time')
+    ordering = ('start_time',)
+
+@admin.register(SchoolClass)
+class SchoolClassAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    search_fields = ('name',)
+    ordering = ('name',)
+
 # --- Configuration for the Coach Admin ---
 @admin.register(Coach)
 class CoachAdmin(admin.ModelAdmin):
@@ -124,11 +142,41 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
     def get_student_name(self, obj):
         return obj.enrollment.student
 
-# --- Register all other models with the admin site ---
-admin.site.register(Term)
-admin.site.register(TimeSlot)
-admin.site.register(SchoolClass)
-admin.site.register(Enrollment)
-admin.site.register(ScheduledUnavailability)
-admin.site.register(LessonSession)
-admin.site.register(LessonNote)
+# --- Configuration for Enrollment Admin ---
+@admin.register(Enrollment)
+class EnrollmentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'term', 'enrollment_type')
+    list_filter = ('term', 'enrollment_type')
+    search_fields = ('student__first_name', 'student__last_name')
+    ordering = ('term', 'student__last_name', 'student__first_name')
+
+# --- Configuration for Lesson Session Admin ---
+@admin.register(LessonSession)
+class LessonSessionAdmin(admin.ModelAdmin):
+    list_display = ('scheduled_group', 'lesson_date', 'status')
+    list_filter = ('status', 'lesson_date', 'scheduled_group__term')
+    search_fields = ('scheduled_group__name',)
+    ordering = ('-lesson_date',)
+
+# --- Configuration for Lesson Note Admin ---
+@admin.register(LessonNote)
+class LessonNoteAdmin(admin.ModelAdmin):
+    list_display = ('get_student_name', 'get_lesson_date', 'student_understanding')
+    list_filter = ('student_understanding', 'attendance_record__lesson_session__lesson_date')
+    search_fields = ('attendance_record__enrollment__student__first_name', 'attendance_record__enrollment__student__last_name')
+    
+    @admin.display(description='Student', ordering='attendance_record__enrollment__student__last_name')
+    def get_student_name(self, obj):
+        return obj.attendance_record.enrollment.student
+    
+    @admin.display(description='Lesson Date', ordering='attendance_record__lesson_session__lesson_date')
+    def get_lesson_date(self, obj):
+        return obj.attendance_record.lesson_session.lesson_date
+
+# --- Configuration for Scheduled Unavailability Admin ---
+@admin.register(ScheduledUnavailability)
+class ScheduledUnavailabilityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'day_of_week', 'time_slot')
+    list_filter = ('day_of_week',)
+    search_fields = ('name',)
+    filter_horizontal = ('students', 'school_classes')
