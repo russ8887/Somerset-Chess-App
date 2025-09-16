@@ -65,12 +65,16 @@
                     {% if record.status == 'ABSENT' and record.reason_for_absence %}
                         <strong>Absence Reason:</strong> {{ record.get_reason_for_absence_display }}
                     {% endif %}
-                    {% if record.lessonnote and record.lessonnote.topics_covered %}
-                        <br><strong>Topics:</strong> {{ record.lessonnote.topics_covered }}
-                    {% endif %}
-                    {% if record.lessonnote and record.lessonnote.coach_comments %}
-                        <br><strong>Comments:</strong> {{ record.lessonnote.coach_comments }}
-                    {% endif %}
+                    {% with note=record.lessonnote|default:None %}
+                        {% if note %}
+                            {% if note.topics_covered %}
+                                <br><strong>Topics:</strong> {{ note.topics_covered }}
+                            {% endif %}
+                            {% if note.coach_comments %}
+                                <br><strong>Comments:</strong> {{ note.coach_comments }}
+                            {% endif %}
+                        {% endif %}
+                    {% endwith %}
                 </td>
             </tr>
         {% empty %}
