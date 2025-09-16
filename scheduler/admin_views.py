@@ -151,11 +151,18 @@ def import_students_csv(request):
                 lines = content.strip().split('\n')
                 if not lines:
                     messages.error(request, 'CSV file is empty.')
-                    return render(request, 'admin/csv_import.html', {
+                    context = {
                         'form': form,
                         'title': 'Import Students from CSV',
                         'opts': Student._meta,
-                    })
+                        'is_popup': False,
+                        'has_view_permission': True,
+                        'has_add_permission': True,
+                        'has_change_permission': True,
+                        'has_delete_permission': False,
+                        'app_label': Student._meta.app_label,
+                    }
+                    return render(request, 'admin/csv_import.html', context)
                 
                 header_line = lines[0].lower()
                 
@@ -300,11 +307,18 @@ def import_students_csv(request):
                 
                 else:
                     messages.error(request, 'Unrecognized CSV format. Please use either the standard format (first_name, last_name, school_class, year_level, enrollment_type) or the new format (Group of:, STUDENTS_nameandclass).')
-                    return render(request, 'admin/csv_import.html', {
+                    context = {
                         'form': form,
                         'title': 'Import Students from CSV',
                         'opts': Student._meta,
-                    })
+                        'is_popup': False,
+                        'has_view_permission': True,
+                        'has_add_permission': True,
+                        'has_change_permission': True,
+                        'has_delete_permission': False,
+                        'app_label': Student._meta.app_label,
+                    }
+                    return render(request, 'admin/csv_import.html', context)
                 
                 # Show results
                 if imported_count > 0:
@@ -335,11 +349,18 @@ def import_students_csv(request):
         print("DEBUG: GET request - showing empty form")
         form = CSVImportForm()
     
-    return render(request, 'admin/csv_import.html', {
+    context = {
         'form': form,
         'title': 'Import Students from CSV',
         'opts': Student._meta,
-    })
+        'is_popup': False,
+        'has_view_permission': True,
+        'has_add_permission': True,
+        'has_change_permission': True,
+        'has_delete_permission': False,
+        'app_label': Student._meta.app_label,
+    }
+    return render(request, 'admin/csv_import.html', context)
 
 @staff_member_required
 def import_lessons_csv(request):
@@ -353,11 +374,18 @@ def import_lessons_csv(request):
             
             if not term:
                 messages.error(request, 'No active term is set. Please go to the Terms admin and set one term as active before importing lessons.')
-                return render(request, 'admin/csv_import.html', {
+                context = {
                     'form': form,
                     'title': 'Import Lessons from CSV',
                     'opts': ScheduledGroup._meta,
-                })
+                    'is_popup': False,
+                    'has_view_permission': True,
+                    'has_add_permission': True,
+                    'has_change_permission': True,
+                    'has_delete_permission': False,
+                    'app_label': ScheduledGroup._meta.app_label,
+                }
+                return render(request, 'admin/csv_import.html', context)
             
             try:
                 csv_file.seek(0)
@@ -560,11 +588,18 @@ def import_lessons_csv(request):
     else:
         form = LessonCSVImportForm()
     
-    return render(request, 'admin/csv_import.html', {
+    context = {
         'form': form,
         'title': 'Import Lessons from CSV',
         'opts': ScheduledGroup._meta,
-    })
+        'is_popup': False,
+        'has_view_permission': True,
+        'has_add_permission': True,
+        'has_change_permission': True,
+        'has_delete_permission': False,
+        'app_label': ScheduledGroup._meta.app_label,
+    }
+    return render(request, 'admin/csv_import.html', context)
 
 @staff_member_required
 def download_csv_template(request):
