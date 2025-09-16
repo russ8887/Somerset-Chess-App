@@ -414,8 +414,10 @@ def import_lessons_csv(request):
                         coach_name = row.get('Regular Coach', '').strip()
                         lesson_data = row.get('2025 Regular Lessons', '').strip()
                         
+                        print(f"DEBUG Row {row_num}: enrollment_type='{enrollment_type_code}', name='{name_and_class}', coach='{coach_name}', lessons='{lesson_data}'")
+                        
                         if not all([enrollment_type_code, name_and_class, coach_name, lesson_data]):
-                            errors.append(f"Row {row_num}: Missing required data")
+                            errors.append(f"Row {row_num}: Missing required data - enrollment_type='{enrollment_type_code}', name='{name_and_class}', coach='{coach_name}', lessons='{lesson_data}'")
                             skipped_count += 1
                             continue
                         
