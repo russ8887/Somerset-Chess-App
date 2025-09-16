@@ -563,21 +563,31 @@ def import_lessons_csv(request):
                         skipped_count += 1
                         continue
                 
-                # Show results
+                # Show results with detailed debugging
+                print(f"DEBUG: Import completed - Groups: {imported_groups}, Enrollments: {imported_enrollments}, Skipped: {skipped_count}")
+                print(f"DEBUG: Processed groups: {list(processed_groups.keys())}")
+                
                 if imported_groups > 0 or imported_enrollments > 0:
-                    messages.success(request, f'Successfully imported {imported_groups} scheduled groups and {imported_enrollments} enrollments into {term.name}.')
+                    success_msg = f'Successfully imported {imported_groups} scheduled groups and {imported_enrollments} enrollments into {term.name}.'
+                    messages.success(request, success_msg)
+                    print(f"DEBUG: Success message: {success_msg}")
+                else:
+                    messages.info(request, f'No new data was imported. Processed {len(processed_groups)} existing groups.')
                 
                 if skipped_count > 0:
-                    messages.warning(request, f'Skipped {skipped_count} rows due to errors.')
+                    warning_msg = f'Skipped {skipped_count} rows due to errors.'
+                    messages.warning(request, warning_msg)
+                    print(f"DEBUG: Warning message: {warning_msg}")
                 
                 if errors:
                     error_message = "Errors encountered:\n" + "\n".join(errors[:10])  # Show first 10 errors
                     if len(errors) > 10:
                         error_message += f"\n... and {len(errors) - 10} more errors."
                     messages.error(request, error_message)
+                    print(f"DEBUG: Error message: {error_message}")
                 
-                if imported_groups > 0:
-                    return redirect('/admin/scheduler/scheduledgroup/')
+                # Always redirect to show results, even if no new imports
+                return redirect('/admin/scheduler/scheduledgroup/')
                     
             except Exception as e:
                 messages.error(request, f'Error processing CSV file: {str(e)}')
