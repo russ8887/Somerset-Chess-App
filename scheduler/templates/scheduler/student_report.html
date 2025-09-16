@@ -1,86 +1,179 @@
-<style>
-    .report-table { width: 100%; border-collapse: collapse; margin-top: 1em; }
-    .report-table th, .report-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    .report-table th { background-color: #f2f2f2; }
-    .debug-info { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 10px 0; border-radius: 5px; }
-</style>
+{% extends 'scheduler/base.html' %}
 
-<h3>Student Report</h3>
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Navigation breadcrumb and back button -->
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="{% url 'dashboard' %}" class="text-decoration-none">
+                        <i class="bi bi-house-door me-1"></i>Dashboard
+                    </a>
+                </li>
+                <li class="breadcrumb-item active" aria-current="page">Student Report</li>
+            </ol>
+        </nav>
 
-{% if error %}
-    <div class="alert alert-danger">
-        <strong>Error:</strong> {{ error }}
+        <!-- Back button -->
+        <div class="mb-3">
+            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+            </a>
+        </div>
+
+        <!-- Student Report Card -->
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="card-title mb-0">
+                    <i class="bi bi-person-circle me-2"></i>Student Report
+                </h4>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> {{ error }}
+                    </div>
+                {% endif %}
+
+                {% if debug_info %}
+                    <div class="alert alert-info">
+                        <strong>Debug Info:</strong><br>
+                        Student PK: {{ debug_info.student_pk }}<br>
+                        Term PK: {{ debug_info.term_pk }}<br>
+                        Records Count: {{ debug_info.records_count }}<br>
+                        Request Path: {{ debug_info.request_path }}<br>
+                        Is HTMX: {{ debug_info.is_htmx }}
+                    </div>
+                {% endif %}
+
+                {% if student and term %}
+                    <!-- Student Information -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h5 class="text-primary">Student Information</h5>
+                            <p class="mb-1"><strong>Name:</strong> {{ student.first_name }} {{ student.last_name }}</p>
+                            <p class="mb-1"><strong>Year Level:</strong> {{ student.year_level|default:"Not specified" }}</p>
+                            <p class="mb-1"><strong>School Class:</strong> {{ student.school_class|default:"Not specified" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h5 class="text-primary">Term Information</h5>
+                            <p class="mb-1"><strong>Term:</strong> {{ term.name }}</p>
+                            <p class="mb-1"><strong>Period:</strong> {{ term.start_date|date:"d M Y" }} - {{ term.end_date|date:"d M Y" }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Attendance Summary -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h5 class="text-primary">Attendance Summary</h5>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge bg-success fs-6 px-3 py-2">
+                                    <i class="bi bi-check-circle me-1"></i>{{ present_count }} Present
+                                </span>
+                                <span class="badge bg-danger fs-6 px-3 py-2">
+                                    <i class="bi bi-x-circle me-1"></i>{{ absent_count }} Absent
+                                </span>
+                                <span class="badge bg-secondary fs-6 px-3 py-2">
+                                    <i class="bi bi-calendar-event me-1"></i>{{ records|length }} Total Lessons
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lesson Records Table -->
+                    <div class="row">
+                        <div class="col-12">
+                            <h5 class="text-primary">Lesson History</h5>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Status</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for record in records %}
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ record.lesson_session.lesson_date|date:"d M Y" }}</strong>
+                                                    <br>
+                                                    <small class="text-muted">{{ record.lesson_session.lesson_date|date:"l" }}</small>
+                                                </td>
+                                                <td>
+                                                    <span class="badge {% if record.status == 'PRESENT' or record.status == 'FILL_IN' or record.status == 'SICK_PRESENT' %}bg-success{% elif record.status == 'REFUSES_PRESENT' %}bg-warning text-dark{% elif record.status == 'ABSENT' %}bg-danger{% else %}bg-secondary{% endif %} fs-6">
+                                                        {% if record.status == 'SICK_PRESENT' %}
+                                                            <i class="bi bi-thermometer-half me-1"></i>
+                                                        {% elif record.status == 'REFUSES_PRESENT' %}
+                                                            <i class="bi bi-exclamation-triangle me-1"></i>
+                                                        {% elif record.status == 'PRESENT' %}
+                                                            <i class="bi bi-check-circle me-1"></i>
+                                                        {% elif record.status == 'ABSENT' %}
+                                                            <i class="bi bi-x-circle me-1"></i>
+                                                        {% elif record.status == 'FILL_IN' %}
+                                                            <i class="bi bi-person-plus me-1"></i>
+                                                        {% endif %}
+                                                        {{ record.get_status_display }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    {% if record.status == 'ABSENT' and record.reason_for_absence %}
+                                                        <div class="mb-2">
+                                                            <strong class="text-danger">Absence Reason:</strong> 
+                                                            <span class="badge bg-light text-dark">{{ record.get_reason_for_absence_display }}</span>
+                                                        </div>
+                                                    {% endif %}
+                                                    {% with note=record.lessonnote|default:None %}
+                                                        {% if note %}
+                                                            {% if note.topics_covered %}
+                                                                <div class="mb-1">
+                                                                    <strong class="text-info">Topics:</strong> 
+                                                                    <span class="text-muted">{{ note.topics_covered }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                            {% if note.coach_comments %}
+                                                                <div class="mb-1">
+                                                                    <strong class="text-success">Comments:</strong> 
+                                                                    <span class="text-muted">{{ note.coach_comments }}</span>
+                                                                </div>
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    {% endwith %}
+                                                    {% if not record.reason_for_absence and not note %}
+                                                        <span class="text-muted fst-italic">No additional details</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        {% empty %}
+                                            <tr>
+                                                <td colspan="3" class="text-center text-muted py-4">
+                                                    <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+                                                    No lesson records found for this student in this term.
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Information Missing:</strong> Student or term information is not available.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
-{% endif %}
-
-{% if debug_info %}
-    <div class="debug-info">
-        <strong>Debug Info:</strong><br>
-        Student PK: {{ debug_info.student_pk }}<br>
-        Term PK: {{ debug_info.term_pk }}<br>
-        Records Count: {{ debug_info.records_count }}<br>
-        Request Path: {{ debug_info.request_path }}<br>
-        Is HTMX: {{ debug_info.is_htmx }}
-    </div>
-{% endif %}
-
-{% if student and term %}
-<p>
-    <strong>Student:</strong> {{ student }}<br>
-    <strong>Term:</strong> {{ term.name }}
-</p>
-{% else %}
-<p><em>Student or term information not available</em></p>
-{% endif %}
-
-<div class="mb-3">
-    <span class="badge bg-success me-2">{{ present_count }} present</span>
-    <span class="badge bg-danger me-2">{{ absent_count }} absent</span>
-    <span class="badge bg-secondary">{{ records|length }} total lessons</span>
 </div>
+{% endblock %}
 
-<table class="report-table">
-    <thead>
-        <tr>
-            <th>Date</th>
-            <th>Status</th>
-            <th>Reason / Notes</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for record in records %}
-            <tr>
-                <td>{{ record.lesson_session.lesson_date|date:"d M Y" }}</td>
-                <td>
-                    <span class="{% if record.status == 'PRESENT' or record.status == 'FILL_IN' or record.status == 'SICK_PRESENT' %}text-success{% elif record.status == 'REFUSES_PRESENT' %}text-warning{% elif record.status == 'ABSENT' %}text-danger{% else %}text-muted{% endif %}">
-                        {% if record.status == 'SICK_PRESENT' %}
-                            <i class="bi bi-thermometer-half me-1"></i>
-                        {% elif record.status == 'REFUSES_PRESENT' %}
-                            <i class="bi bi-exclamation-triangle me-1"></i>
-                        {% endif %}
-                        {{ record.get_status_display }}
-                    </span>
-                </td>
-                <td>
-                    {% if record.status == 'ABSENT' and record.reason_for_absence %}
-                        <strong>Absence Reason:</strong> {{ record.get_reason_for_absence_display }}
-                    {% endif %}
-                    {% with note=record.lessonnote|default:None %}
-                        {% if note %}
-                            {% if note.topics_covered %}
-                                <br><strong>Topics:</strong> {{ note.topics_covered }}
-                            {% endif %}
-                            {% if note.coach_comments %}
-                                <br><strong>Comments:</strong> {{ note.coach_comments }}
-                            {% endif %}
-                        {% endif %}
-                    {% endwith %}
-                </td>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="3">No lesson records found for this student in this term.</td>
-            </tr>
-        {% endfor %}
-    </tbody>
-</table>
+{% block extra_js %}
+<script>
+    // Add any student report specific JavaScript here if needed
+    console.log('Student report page loaded');
+</script>
+{% endblock %}
