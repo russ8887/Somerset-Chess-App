@@ -114,15 +114,15 @@ class LessonCSVImportForm(forms.Form):
             reader = csv.DictReader(io.StringIO(content))
             fieldnames = reader.fieldnames or []
             
-            # Check for required columns for lesson import
-            required_columns = ['Group of:', 'STUDENTS_nameandclass', 'Regular Coach']
+            # Check for required columns for lesson import (updated for GROUP_link format)
+            required_columns = ['Group of:', 'STUDENTS_nameandclass', 'Regular Coach', 'GROUP_link']
             missing_columns = [col for col in required_columns if col not in fieldnames]
             
             if missing_columns:
                 raise ValidationError(
                     f'CSV file is missing required columns: {", ".join(missing_columns)}\n'
                     f'Found columns: {", ".join(fieldnames)}\n'
-                    f'Expected columns: Group of:, STUDENTS_nameandclass, Regular Coach, and lesson schedule data'
+                    f'Expected columns: Group of:, STUDENTS_nameandclass, Regular Coach, GROUP_link'
                 )
                 
         except UnicodeDecodeError:

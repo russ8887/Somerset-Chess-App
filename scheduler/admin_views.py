@@ -79,6 +79,58 @@ def parse_lesson_schedule_string(lesson_string):
         'time': time_str
     }
 
+def parse_group_link(group_link, coach_name):
+    """
+    Parse GROUP_link format like 'LK_SW17Tue11:00' into lesson schedule info
+    Returns: {'coach_name': 'Liam', 'day': 'Tuesday', 'time': '11:00am'}
+    """
+    # Extract day and time from the end of the string
+    # Pattern: ...DayHH:MM where Day is Mon/Tue/Wed/Thu/Fri
+    
+    days_map = {
+        'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 
+        'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday'
+    }
+    
+    # Find the day pattern in the group link
+    for short_day, full_day in days_map.items():
+        if short_day in group_link:
+            # Extract everything after the day
+            time_part = group_link.split(short_day)[-1]  # Gets "11:00" or "13:20"
+            
+            # Convert 24-hour format to 12-hour format with am/pm
+            if ':' in time_part:
+                hour_str, minute_str = time_part.split(':')
+                try:
+                    hour = int(hour_str)
+                    minute = int(minute_str)
+                    
+                    # Convert to 12-hour format
+                    if hour == 0:
+                        time_with_ampm = f"12:{minute:02d}am"
+                    elif hour < 12:
+                        time_with_ampm = f"{hour}:{minute:02d}am"
+                    elif hour == 12:
+                        time_with_ampm = f"12:{minute:02d}pm"
+                    else:
+                        time_with_ampm = f"{hour-12}:{minute:02d}pm"
+                        
+                except ValueError:
+                    raise ValueError(f"Cannot parse time from group link: {group_link}")
+            else:
+                raise ValueError(f"No time found in group link: {group_link}")
+            
+            # Get coach first name from the coach_name
+            coach_first_name = coach_name.split()[0]  # "Liam Kelly" -> "Liam"
+            
+            return {
+                'coach_name': coach_first_name,
+                'day': full_day,
+                'time': time_with_ampm
+            }
+    
+    raise ValueError(f"Cannot parse group link format - no day found: {group_link}")
+
 def parse_time_string(time_str):
     """
     Convert time strings like "11:00am" or "2:20pm" to time objects
@@ -412,12 +464,12 @@ def import_lessons_csv(request):
                         enrollment_type_code = row.get('Group of:', '').strip()
                         name_and_class = row.get('STUDENTS_nameandclass', '').strip()
                         coach_name = row.get('Regular Coach', '').strip()
-                        lesson_data = row.get('2025 Regular Lessons', '').strip()
+                        group_link = row.get('GROUP_link', '').strip()
                         
-                        print(f"DEBUG Row {row_num}: enrollment_type='{enrollment_type_code}', name='{name_and_class}', coach='{coach_name}', lessons='{lesson_data}'")
+                        print(f"DEBUG Row {row_num}: enrollment_type='{enrollment_type_code}', name='{name_and_class}', coach='{coach_name}', group_link='{group_link}'")
                         
-                        if not all([enrollment_type_code, name_and_class, coach_name, lesson_data]):
-                            errors.append(f"Row {row_num}: Missing required data - enrollment_type='{enrollment_type_code}', name='{name_and_class}', coach='{coach_name}', lessons='{lesson_data}'")
+                        if not all([enrollment_type_code, name_and_class, coach_name, group_link]):
+                            errors.append(f"Row {row_num}: Missing required data - enrollment_type='{enrollment_type_code}', name='{name_and_class}', coach='{coach_name}', group_link='{group_link}'")
                             skipped_count += 1
                             continue
                         
@@ -455,110 +507,111 @@ def import_lessons_csv(request):
                         if enrollment_created:
                             imported_enrollments += 1
                         
-                        # Parse lesson schedule data
-                        lesson_strings = [s.strip() for s in lesson_data.split(',') if s.strip()]
-                        
-                        for lesson_string in lesson_strings:
-                            try:
-                                # Parse the lesson schedule
-                                schedule_info = parse_lesson_schedule_string(lesson_string)
-                                
-                                # Use the coach name from the lesson string, not the CSV column
-                                actual_coach_name = schedule_info['coach_name']
-                                
-                                # Skip lessons that aren't for the regular coach (these are fill-ins/substitutions)
-                                if actual_coach_name.lower() != coach_name.lower():
+                        # Parse GROUP_link to get schedule information
+                        try:
+                            # Parse the group link to get schedule info
+                            schedule_info = parse_group_link(group_link, coach_name)
+                            
+                            print(f"DEBUG Row {row_num}: Parsed schedule_info: {schedule_info}")
+                            
+                            # Use the coach name from the parsed info
+                            actual_coach_name = schedule_info['coach_name']
+                            
+                            # Create a unique group identifier
+                            group_key = f"{actual_coach_name}_{schedule_info['day']}_{schedule_info['time']}"
+                            
+                            if group_key not in processed_groups:
+                                # Find or create coach
+                                coach = None
+                                try:
+                                    # Try to find coach by first name
+                                    coach_user = User.objects.filter(first_name__iexact=actual_coach_name).first()
+                                    if coach_user:
+                                        coach, _ = Coach.objects.get_or_create(user=coach_user)
+                                    else:
+                                        # Try to find coach by full name or create a user
+                                        coach_user = User.objects.filter(
+                                            first_name__icontains=actual_coach_name.split()[0]
+                                        ).first()
+                                        
+                                        if not coach_user:
+                                            # Create a new user for the coach
+                                            name_parts = actual_coach_name.split()
+                                            first_name_part = name_parts[0]
+                                            last_name_part = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+                                            
+                                            coach_user = User.objects.create_user(
+                                                username=f"{first_name_part.lower()}.{last_name_part.lower()}".replace(' ', ''),
+                                                first_name=first_name_part,
+                                                last_name=last_name_part,
+                                                email=f"{first_name_part.lower()}.{last_name_part.lower()}@somersetchess.com".replace(' ', ''),
+                                                is_staff=True  # Allow admin access
+                                            )
+                                        
+                                        coach, _ = Coach.objects.get_or_create(
+                                            user=coach_user,
+                                            defaults={'is_head_coach': False}
+                                        )
+                                except Exception as e:
+                                    errors.append(f"Row {row_num}: Error finding/creating coach '{actual_coach_name}': {str(e)}")
+                                    skipped_count += 1
+                                    continue
+                                    
+                                # Parse time and create time slot
+                                try:
+                                    start_time = parse_time_string(schedule_info['time'])
+                                    # Assume 30-minute lessons
+                                    end_hour = start_time.hour
+                                    end_minute = start_time.minute + 30
+                                    if end_minute >= 60:
+                                        end_hour += 1
+                                        end_minute -= 60
+                                    end_time = time(end_hour, end_minute)
+                                    
+                                    time_slot, _ = TimeSlot.objects.get_or_create(
+                                        start_time=start_time,
+                                        end_time=end_time
+                                    )
+                                except Exception as e:
+                                    errors.append(f"Row {row_num}: Error parsing time '{schedule_info['time']}': {str(e)}")
+                                    skipped_count += 1
                                     continue
                                 
-                                # Create a unique group identifier
-                                group_key = f"{actual_coach_name}_{schedule_info['day']}_{schedule_info['time']}"
+                                # Create group name
+                                group_name = f"{actual_coach_name}'s {schedule_info['day']} {schedule_info['time']} Group"
                                 
-                                if group_key not in processed_groups:
-                                    # Find or create coach
-                                    coach = None
-                                    try:
-                                        # Try to find coach by first name
-                                        coach_user = User.objects.filter(first_name__iexact=actual_coach_name).first()
-                                        if coach_user:
-                                            coach, _ = Coach.objects.get_or_create(user=coach_user)
-                                        else:
-                                            # Try to find coach by full name or create a user
-                                            coach_user = User.objects.filter(
-                                                first_name__icontains=actual_coach_name.split()[0]
-                                            ).first()
-                                            
-                                            if not coach_user:
-                                                # Create a new user for the coach
-                                                name_parts = actual_coach_name.split()
-                                                first_name = name_parts[0]
-                                                last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
-                                                
-                                                coach_user = User.objects.create_user(
-                                                    username=f"{first_name.lower()}.{last_name.lower()}".replace(' ', ''),
-                                                    first_name=first_name,
-                                                    last_name=last_name,
-                                                    email=f"{first_name.lower()}.{last_name.lower()}@somersetchess.com".replace(' ', ''),
-                                                    is_staff=True  # Allow admin access
-                                                )
-                                            
-                                            coach, _ = Coach.objects.get_or_create(
-                                                user=coach_user,
-                                                defaults={'is_head_coach': False}
-                                            )
-                                    except Exception as e:
-                                        errors.append(f"Row {row_num}: Error finding/creating coach '{actual_coach_name}': {str(e)}")
-                                        continue
-                                        
-                                    # Parse time and create time slot
-                                    try:
-                                        start_time = parse_time_string(schedule_info['time'])
-                                        # Assume 30-minute lessons
-                                        end_hour = start_time.hour
-                                        end_minute = start_time.minute + 30
-                                        if end_minute >= 60:
-                                            end_hour += 1
-                                            end_minute -= 60
-                                        end_time = time(end_hour, end_minute)
-                                        
-                                        time_slot, _ = TimeSlot.objects.get_or_create(
-                                            start_time=start_time,
-                                            end_time=end_time
-                                        )
-                                    except Exception as e:
-                                        errors.append(f"Row {row_num}: Error parsing time '{schedule_info['time']}': {str(e)}")
-                                        continue
+                                # Create scheduled group
+                                try:
+                                    day_number = get_day_of_week_number(schedule_info['day'])
                                     
-                                    # Create group name
-                                    group_name = f"{coach_name}'s {schedule_info['day']} {schedule_info['time']} Group"
+                                    scheduled_group, group_created = ScheduledGroup.objects.get_or_create(
+                                        name=group_name,
+                                        term=term,
+                                        day_of_week=day_number,
+                                        time_slot=time_slot,
+                                        defaults={'coach': coach}
+                                    )
                                     
-                                    # Create scheduled group
-                                    try:
-                                        day_number = get_day_of_week_number(schedule_info['day'])
-                                        
-                                        scheduled_group, group_created = ScheduledGroup.objects.get_or_create(
-                                            name=group_name,
-                                            term=term,
-                                            day_of_week=day_number,
-                                            time_slot=time_slot,
-                                            defaults={'coach': coach}
-                                        )
-                                        
-                                        if group_created:
-                                            imported_groups += 1
-                                        
-                                        processed_groups[group_key] = scheduled_group
-                                        
-                                    except Exception as e:
-                                        errors.append(f"Row {row_num}: Error creating scheduled group: {str(e)}")
-                                        continue
-                                
-                                # Add enrollment to the group
-                                scheduled_group = processed_groups[group_key]
-                                scheduled_group.members.add(enrollment)
-                                
-                            except Exception as e:
-                                errors.append(f"Row {row_num}: Error processing lesson '{lesson_string}': {str(e)}")
-                                continue
+                                    if group_created:
+                                        imported_groups += 1
+                                        print(f"DEBUG: Created new group: {group_name}")
+                                    
+                                    processed_groups[group_key] = scheduled_group
+                                    
+                                except Exception as e:
+                                    errors.append(f"Row {row_num}: Error creating scheduled group: {str(e)}")
+                                    skipped_count += 1
+                                    continue
+                            
+                            # Add enrollment to the group
+                            scheduled_group = processed_groups[group_key]
+                            scheduled_group.members.add(enrollment)
+                            print(f"DEBUG: Added {student.first_name} {student.last_name} to group {scheduled_group.name}")
+                            
+                        except Exception as e:
+                            errors.append(f"Row {row_num}: Error processing group link '{group_link}': {str(e)}")
+                            skipped_count += 1
+                            continue
                         
                     except Exception as e:
                         errors.append(f"Row {row_num}: Unexpected error: {str(e)}")
