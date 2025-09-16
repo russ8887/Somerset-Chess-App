@@ -63,6 +63,11 @@ class ScheduledGroupAdmin(admin.ModelAdmin):
     list_filter = ('term', 'coach', 'day_of_week')
     search_fields = ('name', 'coach__user__first_name', 'coach__user__last_name')
     filter_horizontal = ('members',) # Makes selecting students much easier
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['import_csv_url'] = '/admin/import-lessons/'
+        return super().changelist_view(request, extra_context=extra_context)
 
     # Temporarily commented out to test if basic admin works
     # def change_view(self, request, object_id, form_url='', extra_context=None):

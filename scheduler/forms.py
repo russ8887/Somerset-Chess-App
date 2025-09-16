@@ -69,6 +69,57 @@ class CSVImportForm(forms.Form):
         
         return csv_file
 
+class LessonCSVImportForm(forms.Form):
+    csv_file = forms.FileField(
+        label="Lesson CSV File",
+        help_text="Upload a CSV file with lesson schedule data (your existing format with Group of:, STUDENTS_nameandclass, Regular Coach, etc.)"
+    )
+    term = forms.ModelChoiceField(
+        queryset=Term.objects.all(),
+        label="Term",
+        help_text="Select the term to create lessons for"
+    )
+    
+    def clean_csv_file(self):
+        csv_file = self.cleaned_data['csv_file']
+        
+        if not csv_file.name.endswith('.csv'):
+            raise ValidationError('File must be a CSV file.')
+        
+        # Read and validate CSV structure
+        try:
+            csv_file.seek(0)
+            content = csv_file.read().decode('utf-8-sig')
+            csv_file.seek(0)  # Reset file pointer
+            
+            # Check if file has content
+            if not content.strip():
+                raise ValidationError('CSV file appears to be empty.')
+            
+            # Try to parse as CSV to get actual fieldnames
+            reader = csv.DictReader(io.StringIO(content))
+            fieldnames = reader.fieldnames or []
+            
+            # Check for required columns for lesson import
+            required_columns = ['Group of:', 'STUDENTS_nameandclass', 'Regular Coach']
+            missing_columns = [col for col in required_columns if col not in fieldnames]
+            
+            if missing_columns:
+                raise ValidationError(
+                    f'CSV file is missing required columns: {", ".join(missing_columns)}\n'
+                    f'Found columns: {", ".join(fieldnames)}\n'
+                    f'Expected columns: Group of:, STUDENTS_nameandclass, Regular Coach, and lesson schedule data'
+                )
+                
+        except UnicodeDecodeError:
+            raise ValidationError('File encoding error. Please save your CSV file with UTF-8 encoding.')
+        except ValidationError:
+            raise  # Re-raise validation errors
+        except Exception as e:
+            raise ValidationError(f'Error reading CSV file: {str(e)}')
+        
+        return csv_file
+
 class LessonNoteForm(forms.ModelForm):
     class Meta:
         model = LessonNote
