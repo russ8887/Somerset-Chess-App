@@ -72,13 +72,27 @@ class CSVImportForm(forms.Form):
 class LessonCSVImportForm(forms.Form):
     csv_file = forms.FileField(
         label="Lesson CSV File",
-        help_text="Upload a CSV file with lesson schedule data (your existing format with Group of:, STUDENTS_nameandclass, Regular Coach, etc.)"
+        help_text="Upload a CSV file with lesson schedule data. All lessons will be imported to the currently active term."
     )
-    term = forms.ModelChoiceField(
-        queryset=Term.objects.all(),
-        label="Term",
-        help_text="Select the term to create lessons for"
-    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Get the active term to show in the form
+        active_term = Term.get_active_term()
+        if active_term:
+            self.fields['csv_file'].help_text = f"Upload a CSV file with lesson schedule data. All lessons will be imported to: {active_term.name}"
+        else:
+            self.fields['csv_file'].help_text = "Upload a CSV file with lesson schedule data. WARNING: No active term is set - please set an active term in the Terms admin first."
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        
+        # Check that there's an active term
+        active_term = Term.get_active_term()
+        if not active_term:
+            raise ValidationError('No active term is set. Please go to the Terms admin and set one term as active before importing lessons.')
+        
+        return cleaned_data
     
     def clean_csv_file(self):
         csv_file = self.cleaned_data['csv_file']

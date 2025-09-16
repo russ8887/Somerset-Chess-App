@@ -9,9 +9,14 @@ from .models import (
 # --- Configuration for Basic Models ---
 @admin.register(Term)
 class TermAdmin(admin.ModelAdmin):
-    list_display = ('name', 'start_date', 'end_date')
-    list_filter = ('start_date', 'end_date')
-    ordering = ('-start_date',)
+    list_display = ('name', 'start_date', 'end_date', 'is_active')
+    list_filter = ('start_date', 'end_date', 'is_active')
+    ordering = ('-is_active', '-start_date')  # Show active term first
+    list_editable = ('is_active',)  # Allow quick editing of active status
+    
+    def get_queryset(self, request):
+        """Highlight the active term in the admin list"""
+        return super().get_queryset(request)
 
 @admin.register(TimeSlot)
 class TimeSlotAdmin(admin.ModelAdmin):

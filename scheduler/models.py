@@ -10,9 +10,29 @@ class Term(models.Model):
     name = models.CharField(max_length=100, help_text="e.g., Term 3, 2025")
     start_date = models.DateField()
     end_date = models.DateField()
+    is_active = models.BooleanField(default=False, help_text="Only one term can be active at a time. This term will be used for CSV imports.")
 
     def __str__(self):
-        return self.name
+        active_indicator = " (ACTIVE)" if self.is_active else ""
+        return f"{self.name}{active_indicator}"
+    
+    @classmethod
+    def get_active_term(cls):
+        """Get the currently active term"""
+        try:
+            return cls.objects.get(is_active=True)
+        except cls.DoesNotExist:
+            return None
+        except cls.MultipleObjectsReturned:
+            # If somehow multiple terms are active, return the first one
+            return cls.objects.filter(is_active=True).first()
+    
+    def save(self, *args, **kwargs):
+        """Ensure only one term can be active at a time"""
+        if self.is_active:
+            # Set all other terms to inactive
+            Term.objects.filter(is_active=True).update(is_active=False)
+        super().save(*args, **kwargs)
 
 class TimeSlot(models.Model):
     start_time = models.TimeField()

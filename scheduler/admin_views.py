@@ -55,15 +55,15 @@ def parse_lesson_schedule_string(lesson_string):
     Parse lesson schedule strings like:
     "Term 3 Week 3A Liam's Tuesday 11:00am Group" -> 
     {
-        'term': 'Term 3',
-        'week': 'Week 3A', 
         'coach_name': 'Liam',
         'day': 'Tuesday',
         'time': '11:00am'
     }
+    
+    Simplified version that ignores term/week data and focuses on essential info.
     """
-    # Pattern to match: "Term X Week YZ Coach's Day HH:MMam/pm Group"
-    pattern = r'Term\s+\d+\s+Week\s+\d+[AB]\s+([^\']+)\'s\s+(\w+)\s+(\d{1,2}:\d{2}(?:am|pm))\s+Group'
+    # Pattern to match: Coach's Day HH:MMam/pm (ignoring term/week info)
+    pattern = r'([^\']+)\'s\s+(\w+)\s+(\d{1,2}:\d{2}(?:am|pm))'
     match = re.search(pattern, lesson_string.strip())
     
     if not match:
@@ -73,16 +73,7 @@ def parse_lesson_schedule_string(lesson_string):
     day = match.group(2).strip()
     time_str = match.group(3).strip()
     
-    # Extract term and week from the beginning
-    term_match = re.search(r'Term\s+(\d+)', lesson_string)
-    week_match = re.search(r'Week\s+(\d+[AB])', lesson_string)
-    
-    if not term_match or not week_match:
-        raise ValueError(f"Cannot extract term/week from: {lesson_string}")
-    
     return {
-        'term': f"Term {term_match.group(1)}",
-        'week': f"Week {week_match.group(1)}",
         'coach_name': coach_name,
         'day': day,
         'time': time_str
@@ -357,7 +348,16 @@ def import_lessons_csv(request):
         
         if form.is_valid():
             csv_file = form.cleaned_data['csv_file']
-            term = form.cleaned_data['term']
+            # Use the active term instead of getting from form
+            term = Term.get_active_term()
+            
+            if not term:
+                messages.error(request, 'No active term is set. Please go to the Terms admin and set one term as active before importing lessons.')
+                return render(request, 'admin/csv_import.html', {
+                    'form': form,
+                    'title': 'Import Lessons from CSV',
+                    'opts': ScheduledGroup._meta,
+                })
             
             try:
                 csv_file.seek(0)
