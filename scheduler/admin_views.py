@@ -433,27 +433,52 @@ def import_lessons_csv(request):
                                 # Parse the lesson schedule
                                 schedule_info = parse_lesson_schedule_string(lesson_string)
                                 
+                                # Use the coach name from the lesson string, not the CSV column
+                                actual_coach_name = schedule_info['coach_name']
+                                
+                                # Skip lessons that aren't for the regular coach (these are fill-ins/substitutions)
+                                if actual_coach_name.lower() != coach_name.lower():
+                                    continue
+                                
                                 # Create a unique group identifier
-                                group_key = f"{coach_name}_{schedule_info['day']}_{schedule_info['time']}"
+                                group_key = f"{actual_coach_name}_{schedule_info['day']}_{schedule_info['time']}"
                                 
                                 if group_key not in processed_groups:
                                     # Find or create coach
                                     coach = None
                                     try:
                                         # Try to find coach by first name
-                                        coach_user = User.objects.filter(first_name__iexact=coach_name).first()
+                                        coach_user = User.objects.filter(first_name__iexact=actual_coach_name).first()
                                         if coach_user:
                                             coach, _ = Coach.objects.get_or_create(user=coach_user)
                                         else:
-                                            # Create a coach entry without a user (can be linked later)
+                                            # Try to find coach by full name or create a user
+                                            coach_user = User.objects.filter(
+                                                first_name__icontains=actual_coach_name.split()[0]
+                                            ).first()
+                                            
+                                            if not coach_user:
+                                                # Create a new user for the coach
+                                                name_parts = actual_coach_name.split()
+                                                first_name = name_parts[0]
+                                                last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+                                                
+                                                coach_user = User.objects.create_user(
+                                                    username=f"{first_name.lower()}.{last_name.lower()}".replace(' ', ''),
+                                                    first_name=first_name,
+                                                    last_name=last_name,
+                                                    email=f"{first_name.lower()}.{last_name.lower()}@somersetchess.com".replace(' ', ''),
+                                                    is_staff=True  # Allow admin access
+                                                )
+                                            
                                             coach, _ = Coach.objects.get_or_create(
-                                                user=None,
+                                                user=coach_user,
                                                 defaults={'is_head_coach': False}
                                             )
                                     except Exception as e:
-                                        errors.append(f"Row {row_num}: Error finding/creating coach '{coach_name}': {str(e)}")
+                                        errors.append(f"Row {row_num}: Error finding/creating coach '{actual_coach_name}': {str(e)}")
                                         continue
-                                    
+                                        
                                     # Parse time and create time slot
                                     try:
                                         start_time = parse_time_string(schedule_info['time'])
