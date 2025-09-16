@@ -208,6 +208,9 @@ def student_report_view(request, student_pk, term_pk):
         student = get_object_or_404(Student, pk=student_pk)
         term = get_object_or_404(Term, pk=term_pk)
         
+        # Get the viewing date from request for back navigation
+        view_date = request.GET.get('date', date.today().isoformat())
+        
         # Debug logging
         logger.info(f"Student report requested: Student ID {student_pk} ({student}), Term ID {term_pk} ({term})")
         
@@ -217,18 +220,55 @@ def student_report_view(request, student_pk, term_pk):
         # Debug logging
         logger.info(f"Found {records.count()} attendance records for {student} in {term}")
         
-        # Calculate attendance counts
-        present_count = records.filter(status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']).count()
-        absent_count = records.filter(status='ABSENT').count()
+        # Calculate detailed attendance counts
+        regular_present_count = records.filter(status='PRESENT').count()
+        sick_present_count = records.filter(status='SICK_PRESENT').count()
+        refuses_present_count = records.filter(status='REFUSES_PRESENT').count()
+        fill_in_count = records.filter(status='FILL_IN').count()
         
-        logger.info(f"Attendance summary: {present_count} present, {absent_count} absent")
+        # Calculate absence counts by reason
+        absent_count = records.filter(status='ABSENT').count()
+        sick_absent_count = records.filter(status='ABSENT', reason_for_absence='SICK').count()
+        teacher_refusal_count = records.filter(status='ABSENT', reason_for_absence='TEACHER_REFUSAL').count()
+        class_event_count = records.filter(status='ABSENT', reason_for_absence='CLASS_EVENT').count()
+        
+        # Calculate totals
+        total_attended = regular_present_count + sick_present_count + refuses_present_count + fill_in_count
+        
+        # Get individual availability data
+        individual_unavailabilities = ScheduledUnavailability.objects.filter(students=student)
+        time_slots = TimeSlot.objects.all().order_by('start_time')
+        
+        # Create a map of unavailable slots for the form
+        unavailable_slots = {}
+        for unavail in individual_unavailabilities:
+            day = unavail.day_of_week
+            if day not in unavailable_slots:
+                unavailable_slots[day] = []
+            unavailable_slots[day].append(unavail.time_slot.pk)
+        
+        logger.info(f"Attendance summary: {total_attended} total attended, {absent_count} absent")
 
         context = {
             'student': student,
             'term': term,
             'records': records,
-            'present_count': present_count,
-            'absent_count': absent_count
+            'view_date': view_date,
+            # Detailed attendance counts
+            'regular_present_count': regular_present_count,
+            'sick_present_count': sick_present_count,
+            'refuses_present_count': refuses_present_count,
+            'fill_in_count': fill_in_count,
+            'total_attended': total_attended,
+            # Absence counts
+            'absent_count': absent_count,
+            'sick_absent_count': sick_absent_count,
+            'teacher_refusal_count': teacher_refusal_count,
+            'class_event_count': class_event_count,
+            # Availability data
+            'individual_unavailabilities': individual_unavailabilities,
+            'time_slots': time_slots,
+            'unavailable_slots': unavailable_slots,
         }
         
         # Add debug info to template for troubleshooting
@@ -251,8 +291,16 @@ def student_report_view(request, student_pk, term_pk):
             'student': None,
             'term': None,
             'records': [],
-            'present_count': 0,
-            'absent_count': 0
+            'view_date': date.today().isoformat(),
+            'regular_present_count': 0,
+            'sick_present_count': 0,
+            'refuses_present_count': 0,
+            'fill_in_count': 0,
+            'total_attended': 0,
+            'absent_count': 0,
+            'sick_absent_count': 0,
+            'teacher_refusal_count': 0,
+            'class_event_count': 0,
         })
 
 @login_required
@@ -422,6 +470,52 @@ def create_note_view(request, record_pk):
     context['note_form'] = form # Add the form to the context
     
     return render(request, 'scheduler/_lesson_detail.html', context)
+
+@login_required
+def manage_student_availability(request, student_pk):
+    """Handle individual student availability management"""
+    student = get_object_or_404(Student, pk=student_pk)
+    
+    if request.method == 'POST':
+        # Clear existing individual unavailabilities for this student
+        unavailabilities_to_clear = ScheduledUnavailability.objects.filter(students=student)
+        for ua in unavailabilities_to_clear:
+            ua.students.remove(student)
+            # If no students or classes are left, delete the unavailability
+            if not ua.students.exists() and not ua.school_classes.exists():
+                ua.delete()
+        
+        # Process new unavailabilities
+        for key, value in request.POST.items():
+            if key.startswith('unavailable_'):
+                # Parse the key: unavailable_{time_slot_pk}_{day_num}
+                parts = key.split('_')
+                if len(parts) == 3:
+                    time_slot_pk = parts[1]
+                    day_num = int(parts[2])
+                    
+                    try:
+                        time_slot = TimeSlot.objects.get(pk=time_slot_pk)
+                        # Create or get the unavailability record
+                        unavailability, created = ScheduledUnavailability.objects.get_or_create(
+                            name=f"Individual Unavailability - {student.first_name} {student.last_name}",
+                            day_of_week=day_num,
+                            time_slot=time_slot
+                        )
+                        unavailability.students.add(student)
+                    except TimeSlot.DoesNotExist:
+                        continue
+        
+        # Redirect back to student report
+        return_url = request.POST.get('return_url', reverse('student-report', args=[student.pk, Term.get_active_term().pk]))
+        return redirect(return_url)
+    
+    # If GET request, redirect to student report (shouldn't normally happen)
+    active_term = Term.get_active_term()
+    if active_term:
+        return redirect('student-report', student_pk=student.pk, term_pk=active_term.pk)
+    else:
+        return redirect('dashboard')
 
 @login_required
 def view_lesson_note(request, pk):

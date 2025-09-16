@@ -7,7 +7,7 @@
         <nav aria-label="breadcrumb" class="mb-3">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item">
-                    <a href="{% url 'dashboard' %}" class="text-decoration-none">
+                    <a href="{% url 'dashboard' %}?date={{ view_date }}" class="text-decoration-none">
                         <i class="bi bi-house-door me-1"></i>Dashboard
                     </a>
                 </li>
@@ -17,7 +17,7 @@
 
         <!-- Back button -->
         <div class="mb-3">
-            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+            <a href="{% url 'dashboard' %}?date={{ view_date }}" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
             </a>
         </div>
@@ -67,16 +67,147 @@
                     <div class="row mb-4">
                         <div class="col-12">
                             <h5 class="text-primary">Attendance Summary</h5>
-                            <div class="d-flex flex-wrap gap-2">
+                            <div class="d-flex flex-wrap gap-2 mb-3">
                                 <span class="badge bg-success fs-6 px-3 py-2">
-                                    <i class="bi bi-check-circle me-1"></i>{{ present_count }} Present
+                                    <i class="bi bi-check-circle me-1"></i>{{ regular_present_count }} Regular Present
                                 </span>
+                                <span class="badge bg-success fs-6 px-3 py-2">
+                                    <i class="bi bi-thermometer-half me-1"></i>{{ sick_present_count }} Sick but Present
+                                </span>
+                                <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>{{ refuses_present_count }} Present but Refuses
+                                </span>
+                                <span class="badge bg-info fs-6 px-3 py-2">
+                                    <i class="bi bi-person-plus me-1"></i>{{ fill_in_count }} Fill-in Lessons
+                                </span>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2 mb-3">
                                 <span class="badge bg-danger fs-6 px-3 py-2">
-                                    <i class="bi bi-x-circle me-1"></i>{{ absent_count }} Absent
+                                    <i class="bi bi-x-circle me-1"></i>{{ absent_count }} Total Absent
+                                </span>
+                                {% if sick_absent_count > 0 %}
+                                <span class="badge bg-danger fs-6 px-3 py-2">
+                                    <i class="bi bi-thermometer me-1"></i>{{ sick_absent_count }} Sick
+                                </span>
+                                {% endif %}
+                                {% if teacher_refusal_count > 0 %}
+                                <span class="badge bg-danger fs-6 px-3 py-2">
+                                    <i class="bi bi-person-x me-1"></i>{{ teacher_refusal_count }} Teacher Refusal
+                                </span>
+                                {% endif %}
+                                {% if class_event_count > 0 %}
+                                <span class="badge bg-danger fs-6 px-3 py-2">
+                                    <i class="bi bi-calendar-event me-1"></i>{{ class_event_count }} Class Event
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge bg-secondary fs-6 px-3 py-2">
+                                    <i class="bi bi-calendar-check me-1"></i>{{ total_attended }} Total Attended
                                 </span>
                                 <span class="badge bg-secondary fs-6 px-3 py-2">
                                     <i class="bi bi-calendar-event me-1"></i>{{ records|length }} Total Lessons
                                 </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Individual Availability Management -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="text-primary mb-0">Individual Availability</h5>
+                                <button class="btn btn-outline-primary btn-sm" id="editAvailabilityBtn" onclick="toggleAvailabilityEdit()">
+                                    <i class="bi bi-pencil me-1"></i>Edit Availability
+                                </button>
+                            </div>
+                            
+                            <div id="availabilityDisplay" class="mb-3">
+                                <p class="text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Individual availability overrides are managed here. If no individual conflicts are set, 
+                                    the student follows their class availability schedule.
+                                </p>
+                                {% if individual_unavailabilities %}
+                                    <div class="d-flex flex-wrap gap-2">
+                                        {% for unavail in individual_unavailabilities %}
+                                            <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+                                                <i class="bi bi-calendar-x me-1"></i>
+                                                {{ unavail.get_day_of_week_display }} {{ unavail.time_slot }}
+                                            </span>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted fst-italic">No individual availability conflicts set</span>
+                                {% endif %}
+                            </div>
+
+                            <div id="availabilityEditForm" class="d-none">
+                                <form method="post" action="{% url 'manage-student-availability' student.pk %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="return_url" value="{{ request.get_full_path }}">
+                                    
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Time Slot</th>
+                                                    <th>Monday</th>
+                                                    <th>Tuesday</th>
+                                                    <th>Wednesday</th>
+                                                    <th>Thursday</th>
+                                                    <th>Friday</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for time_slot in time_slots %}
+                                                <tr>
+                                                    <td class="fw-semibold">{{ time_slot }}</td>
+                                                    <td class="text-center">
+                                                        <input type="checkbox" 
+                                                               name="unavailable_{{ time_slot.pk }}_0"
+                                                               class="form-check-input"
+                                                               {% if 0 in unavailable_slots and time_slot.pk in unavailable_slots.0 %}checked{% endif %}>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <input type="checkbox" 
+                                                               name="unavailable_{{ time_slot.pk }}_1"
+                                                               class="form-check-input"
+                                                               {% if 1 in unavailable_slots and time_slot.pk in unavailable_slots.1 %}checked{% endif %}>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <input type="checkbox" 
+                                                               name="unavailable_{{ time_slot.pk }}_2"
+                                                               class="form-check-input"
+                                                               {% if 2 in unavailable_slots and time_slot.pk in unavailable_slots.2 %}checked{% endif %}>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <input type="checkbox" 
+                                                               name="unavailable_{{ time_slot.pk }}_3"
+                                                               class="form-check-input"
+                                                               {% if 3 in unavailable_slots and time_slot.pk in unavailable_slots.3 %}checked{% endif %}>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <input type="checkbox" 
+                                                               name="unavailable_{{ time_slot.pk }}_4"
+                                                               class="form-check-input"
+                                                               {% if 4 in unavailable_slots and time_slot.pk in unavailable_slots.4 %}checked{% endif %}>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-check-circle me-1"></i>Save Availability
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" onclick="toggleAvailabilityEdit()">
+                                            <i class="bi bi-x-circle me-1"></i>Cancel
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -173,7 +304,25 @@
 
 {% block extra_js %}
 <script>
-    // Add any student report specific JavaScript here if needed
+    // Toggle availability editing form
+    function toggleAvailabilityEdit() {
+        const displayDiv = document.getElementById('availabilityDisplay');
+        const editForm = document.getElementById('availabilityEditForm');
+        const editBtn = document.getElementById('editAvailabilityBtn');
+        
+        if (editForm.classList.contains('d-none')) {
+            // Show edit form
+            displayDiv.classList.add('d-none');
+            editForm.classList.remove('d-none');
+            editBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>Cancel';
+        } else {
+            // Show display
+            displayDiv.classList.remove('d-none');
+            editForm.classList.add('d-none');
+            editBtn.innerHTML = '<i class="bi bi-pencil me-1"></i>Edit Availability';
+        }
+    }
+    
     console.log('Student report page loaded');
 </script>
 {% endblock %}

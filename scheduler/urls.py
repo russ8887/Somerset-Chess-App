@@ -9,6 +9,7 @@ urlpatterns = [
     path('', views.DashboardView.as_view(), name='dashboard'),
     path('student-report/<int:student_pk>/term/<int:term_pk>/', views.student_report_view, name='student-report'),
     path('availability/', views.manage_availability, name='manage-availability'),
+    path('student/<int:student_pk>/availability/', views.manage_student_availability, name='manage-student-availability'),
     
     # --- New Fill-in Management URL ---
     path('lesson/<int:lesson_pk>/manage/', views.manage_lesson_view, name='manage-lesson'),
