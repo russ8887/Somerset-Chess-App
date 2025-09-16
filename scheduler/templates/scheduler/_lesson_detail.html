@@ -1,4 +1,5 @@
-<div id="lesson-{{ lesson.pk }}">
+<div id="lesson-{{ lesson.pk }}" hx-target="this" hx-swap="outerHTML">
+
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
             <div>
@@ -11,12 +12,14 @@
         </div>
         <ul class="list-group list-group-flush">
             {% for record in lesson.attendancerecord_set.all %}
-            <li class="list-group-item" id="student-row-{{ record.pk }}" hx-target="this" hx-swap="outerHTML">
+            <li class="list-group-item" id="student-row-{{ record.pk }}">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <a href="#"
                        hx-get="{% url 'student-report' record.enrollment.student.pk lesson.scheduled_group.term.pk %}"
                        hx-target="#report-content"
                        hx-swap="innerHTML"
+                       hx-trigger="click"
+                       hx-push-url="false"
                        class="student-link fw-bold text-dark text-decoration-none">
                         {{ record.enrollment.student }}
                         <small class="text-muted">({{ record.enrollment.get_enrollment_type_display }})</small>
@@ -70,11 +73,11 @@
 
                     {# --- Notes Button Logic --- #}
                     {% if record.lessonnote %}
-                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'edit-note' record.lessonnote.pk %}" hx-target="#lesson-{{ lesson.pk }}" hx-swap="outerHTML">
+                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'edit-note' record.lessonnote.pk %}">
                             <i class="bi bi-journal-text me-1"></i>Notes
                         </button>
                     {% else %}
-                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'create-note' record.pk %}" hx-target="#lesson-{{ lesson.pk }}" hx-swap="outerHTML">
+                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'create-note' record.pk %}">
                             <i class="bi bi-plus-circle me-1"></i>Add Note
                         </button>
                     {% endif %}
@@ -83,13 +86,13 @@
                 {# --- Note Editing Form (only appears when editing) --- #}
                 {% if editing_note_id == record.lessonnote.id %}
                 <div class="note-form-container mt-3">
-                    <form hx-post="{% url 'edit-note' record.lessonnote.pk %}" hx-target="#lesson-{{ lesson.pk }}" hx-swap="outerHTML" class="note-form">
+                    <form hx-post="{% url 'edit-note' record.lessonnote.pk %}" class="note-form">
                         {% csrf_token %}
                         {{ note_form.as_p }}
                         
                         <div class="mb-2">
                             <button type="submit" class="btn btn-primary btn-sm">Save Note</button>
-                            <button type="button" class="btn btn-secondary btn-sm" hx-get="{% url 'view-note' record.lessonnote.pk %}" hx-target="#lesson-{{ lesson.pk }}" hx-swap="outerHTML">Cancel</button>
+                            <button type="button" class="btn btn-secondary btn-sm" hx-get="{% url 'view-note' record.lessonnote.pk %}">Cancel</button>
                         </div>
                     </form>
                     <div class="prefilled-notes">
