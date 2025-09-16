@@ -84,7 +84,7 @@
                                 {% if enrollment.effective_deficit > 0 %}
                                     Owes {{ enrollment.effective_deficit }}
                                 {% elif enrollment.effective_deficit < 0 %}
-                                    Credit {{ enrollment.effective_deficit|add:0|abs }}
+                                    Credit {% widthratio enrollment.effective_deficit 1 -1 %}
                                 {% else %}
                                     Balanced
                                 {% endif %}

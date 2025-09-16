@@ -290,15 +290,12 @@ def manage_lesson_view(request, lesson_pk):
     present_student_ids = lesson.attendancerecord_set.all().values_list('enrollment__student_id', flat=True)
 
     # 2. Get all enrollments for the term, excluding those already in the lesson
-    # Enhanced ordering by lesson deficit (biggest deficit first)
     all_candidates = Enrollment.objects.filter(term=term) \
         .exclude(student_id__in=present_student_ids) \
         .select_related('student__school_class') \
         .annotate(
-            actual_lessons=Count('attendancerecord', filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT'])),
-            effective_deficit=F('adjusted_target') - Count('attendancerecord', filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']))
-        ) \
-        .order_by('-effective_deficit', 'actual_lessons')  # Biggest deficit first, then fewest actual lessons
+            actual_lessons=Count('attendancerecord', filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']))
+        )
 
     # 3. Determine which of them are "suggested" (available and not busy)
     busy_student_ids = AttendanceRecord.objects.filter(lesson_session__lesson_date=lesson.lesson_date).values_list('enrollment__student_id', flat=True)
@@ -309,35 +306,28 @@ def manage_lesson_view(request, lesson_pk):
     
     non_suggested_ids = set(list(busy_student_ids) + list(unavailable_student_ids) + list(unavailable_class_student_ids))
 
-    # 4. Calculate expected lessons and progress status for each candidate
-    from datetime import date
-    today = date.today()
-    term_start = term.start_date
-    term_end = min(term.end_date, today)  # Don't count future lessons
-
-    # Calculate total expected lessons for this term up to today
-    total_weeks = max(1, (term_end - term_start).days // 7 + 1)
-    expected_lessons = total_weeks  # Assuming 1 lesson per week per group
-
+    # 4. Process each candidate and add calculated fields
+    candidates_list = []
     for enrollment in all_candidates:
-        if enrollment.student_id in non_suggested_ids:
-            enrollment.is_suggested = False
-        else:
-            enrollment.is_suggested = True
-
-        # Calculate progress status using the new actual_lessons annotation
+        # Set availability status
+        enrollment.is_suggested = enrollment.student_id not in non_suggested_ids
+        
+        # Calculate lesson balance using the model method
+        enrollment.effective_deficit = enrollment.get_lesson_balance()
+        
+        # Calculate progress color based on actual lessons vs expected
         actual_lessons = enrollment.actual_lessons
-        lesson_gap = expected_lessons - actual_lessons
-
-        if lesson_gap <= 1:
-            enrollment.progress_status = 'on_track'  # Green
-            enrollment.progress_color = 'success'
-        elif lesson_gap <= 3:
-            enrollment.progress_status = 'little_behind'  # Orange
-            enrollment.progress_color = 'warning'
+        if actual_lessons <= 2:
+            enrollment.progress_color = 'danger'  # Red - far behind
+        elif actual_lessons <= 4:
+            enrollment.progress_color = 'warning'  # Orange - behind
         else:
-            enrollment.progress_status = 'far_behind'  # Red
-            enrollment.progress_color = 'danger'
+            enrollment.progress_color = 'success'  # Green - on track
+            
+        candidates_list.append(enrollment)
+
+    # 5. Sort by deficit (biggest deficit first), then by fewest actual lessons
+    candidates_list.sort(key=lambda e: (-e.effective_deficit, e.actual_lessons))
 
     # Get the list of students currently in the lesson for display
     current_records = lesson.attendancerecord_set.select_related(
@@ -347,7 +337,7 @@ def manage_lesson_view(request, lesson_pk):
     context = {
         'lesson': lesson,
         'current_records': current_records,
-        'all_candidates': all_candidates, # Pass the single master list
+        'all_candidates': candidates_list,
     }
     return render(request, 'scheduler/manage_lesson.html', context)
 # --- HTMX Helper Views ---
@@ -356,9 +346,18 @@ def manage_lesson_view(request, lesson_pk):
 @require_POST
 def mark_attendance(request, pk, status):
     record = get_object_or_404(AttendanceRecord, pk=pk)
-    record.status = status.upper()
-    if record.status == 'PENDING':
+    new_status = status.upper()
+    
+    # Handle toggle behavior: if clicking the same status, go back to PENDING
+    if record.status == new_status:
+        record.status = 'PENDING'
+    else:
+        record.status = new_status
+    
+    # Clear absence reason if not absent
+    if record.status != 'ABSENT':
         record.reason_for_absence = None
+    
     record.save()
     context = _prepare_lesson_context(record.lesson_session)
     return render(request, 'scheduler/_lesson_detail.html', context)
