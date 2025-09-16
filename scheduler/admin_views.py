@@ -453,11 +453,18 @@ def import_lessons_csv(request):
                 
                 imported_groups = 0
                 imported_enrollments = 0
+                lesson_balances_updated = 0
                 skipped_count = 0
                 errors = []
                 
                 # Track unique groups to avoid duplicates
                 processed_groups = {}
+                
+                # Track lesson balance statistics
+                students_with_debt = 0
+                students_with_credit = 0
+                total_lessons_owed = 0
+                total_lessons_credit = 0
                 
                 for row_num, row in enumerate(reader, start=2):
                     try:
@@ -506,6 +513,31 @@ def import_lessons_csv(request):
                         )
                         if enrollment_created:
                             imported_enrollments += 1
+                        
+                        # Process lesson balance from "Lessons Left" column
+                        lessons_left = row.get('Lessons Left', '').strip()
+                        if lessons_left:
+                            try:
+                                lessons_left_value = int(lessons_left)
+                                
+                                # Update the enrollment's lesson balance
+                                if enrollment.lessons_carried_forward != lessons_left_value:
+                                    enrollment.lessons_carried_forward = lessons_left_value
+                                    enrollment.save()  # This will auto-calculate adjusted_target
+                                    lesson_balances_updated += 1
+                                    
+                                    # Track statistics
+                                    if lessons_left_value > 0:
+                                        students_with_debt += 1
+                                        total_lessons_owed += lessons_left_value
+                                    elif lessons_left_value < 0:
+                                        students_with_credit += 1
+                                        total_lessons_credit += abs(lessons_left_value)
+                                    
+                                    print(f"DEBUG Row {row_num}: Updated lesson balance for {student.first_name} {student.last_name}: {lessons_left_value}")
+                                
+                            except ValueError:
+                                errors.append(f"Row {row_num}: Invalid 'Lessons Left' value '{lessons_left}' for {first_name} {last_name}")
                         
                         # Parse GROUP_link to get schedule information
                         try:
@@ -619,13 +651,35 @@ def import_lessons_csv(request):
                         continue
                 
                 # Show results with detailed debugging
-                print(f"DEBUG: Import completed - Groups: {imported_groups}, Enrollments: {imported_enrollments}, Skipped: {skipped_count}")
+                print(f"DEBUG: Import completed - Groups: {imported_groups}, Enrollments: {imported_enrollments}, Lesson Balances: {lesson_balances_updated}, Skipped: {skipped_count}")
                 print(f"DEBUG: Processed groups: {list(processed_groups.keys())}")
                 
-                if imported_groups > 0 or imported_enrollments > 0:
-                    success_msg = f'Successfully imported {imported_groups} scheduled groups and {imported_enrollments} enrollments into {term.name}.'
+                # Build comprehensive success message
+                success_parts = []
+                if imported_groups > 0:
+                    success_parts.append(f'{imported_groups} scheduled groups')
+                if imported_enrollments > 0:
+                    success_parts.append(f'{imported_enrollments} enrollments')
+                if lesson_balances_updated > 0:
+                    success_parts.append(f'{lesson_balances_updated} lesson balances')
+                
+                if success_parts:
+                    success_msg = f'Successfully imported {", ".join(success_parts)} into {term.name}.'
                     messages.success(request, success_msg)
                     print(f"DEBUG: Success message: {success_msg}")
+                    
+                    # Add lesson balance summary if any were updated
+                    if lesson_balances_updated > 0:
+                        balance_summary_parts = []
+                        if students_with_debt > 0:
+                            balance_summary_parts.append(f'{students_with_debt} students owe {total_lessons_owed} total lessons')
+                        if students_with_credit > 0:
+                            balance_summary_parts.append(f'{students_with_credit} students have {total_lessons_credit} total lesson credits')
+                        
+                        if balance_summary_parts:
+                            balance_msg = f'Lesson balance summary: {", ".join(balance_summary_parts)}.'
+                            messages.info(request, balance_msg)
+                            print(f"DEBUG: Balance summary: {balance_msg}")
                 else:
                     messages.info(request, f'No new data was imported. Processed {len(processed_groups)} existing groups.')
                 

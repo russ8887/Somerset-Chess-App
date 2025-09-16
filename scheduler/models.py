@@ -89,6 +89,35 @@ class Enrollment(models.Model):
         GROUP = 'GROUP', 'Group'
         
     enrollment_type = models.CharField(max_length=5, choices=EnrollmentType.choices)
+    
+    # Lesson balance tracking fields
+    target_lessons = models.IntegerField(default=8, help_text="Target lessons for this term")
+    lessons_carried_forward = models.IntegerField(default=0, help_text="Lessons owed from previous term (+) or credit (-)")
+    adjusted_target = models.IntegerField(default=8, editable=False, help_text="Calculated: target_lessons + lessons_carried_forward")
+    
+    def save(self, *args, **kwargs):
+        # Auto-calculate adjusted target
+        self.adjusted_target = self.target_lessons + self.lessons_carried_forward
+        super().save(*args, **kwargs)
+    
+    def get_lesson_balance(self):
+        """Calculate current lesson balance (positive = owed lessons, negative = extra lessons)"""
+        actual_lessons = self.attendancerecord_set.filter(status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']).count()
+        return self.adjusted_target - actual_lessons
+    
+    def get_balance_status(self):
+        """Get color-coded status for lesson balance"""
+        balance = self.get_lesson_balance()
+        if balance > 2:
+            return {'status': 'owed', 'color': 'danger', 'text': f'{balance} lessons owed'}
+        elif balance > 0:
+            return {'status': 'slightly_owed', 'color': 'warning', 'text': f'{balance} lessons owed'}
+        elif balance < -2:
+            return {'status': 'credit', 'color': 'info', 'text': f'{abs(balance)} lessons credit'}
+        elif balance < 0:
+            return {'status': 'slight_credit', 'color': 'success', 'text': f'{abs(balance)} lessons credit'}
+        else:
+            return {'status': 'balanced', 'color': 'success', 'text': 'On target'}
 
     def __str__(self):
         # UPDATED: Removed the database query from here to prevent major performance issues
@@ -175,10 +204,12 @@ class AttendanceRecord(models.Model):
         PRESENT = 'PRESENT', 'Present'
         ABSENT = 'ABSENT', 'Absent'
         FILL_IN = 'FILL_IN', 'Fill-in'
+        SICK_PRESENT = 'SICK_PRESENT', 'Sick but Present'
+        REFUSES_PRESENT = 'REFUSES_PRESENT', 'Present but Refuses'
 
     lesson_session = models.ForeignKey(LessonSession, on_delete=models.CASCADE)
     enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=15, choices=Status.choices, default=Status.PENDING)
     
     # This field uses the choices defined above
     reason_for_absence = models.CharField(

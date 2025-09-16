@@ -160,9 +160,23 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
 # --- Configuration for Enrollment Admin ---
 @admin.register(Enrollment)
 class EnrollmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'term', 'enrollment_type')
+    list_display = ('student', 'term', 'enrollment_type', 'target_lessons', 'lessons_carried_forward', 'adjusted_target', 'get_lesson_balance_display')
     list_filter = ('term', 'enrollment_type')
     search_fields = ('student__first_name', 'student__last_name')
+    fields = ('student', 'term', 'enrollment_type', 'target_lessons', 'lessons_carried_forward', 'adjusted_target')
+    readonly_fields = ('adjusted_target',)
+    
+    def get_lesson_balance_display(self, obj):
+        balance = obj.get_lesson_balance()
+        status = obj.get_balance_status()
+        if balance > 0:
+            return f"Owes {balance} lessons"
+        elif balance < 0:
+            return f"Credit {abs(balance)} lessons"
+        else:
+            return "Balanced"
+    get_lesson_balance_display.short_description = 'Lesson Balance'
+    get_lesson_balance_display.admin_order_field = 'adjusted_target'
     ordering = ('term', 'student__last_name', 'student__first_name')
 
 # --- Configuration for Lesson Session Admin ---

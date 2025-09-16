@@ -24,7 +24,14 @@
                         <tr>
                             <td>{{ record.enrollment.student }}</td>
                             <td>
-                                <span class="badge {% if record.status == 'PRESENT' %}bg-success{% elif record.status == 'ABSENT' %}bg-danger{% elif record.status == 'FILL_IN' %}bg-info{% else %}bg-secondary{% endif %}">{{ record.get_status_display }}</span>
+                                <span class="badge {% if record.status == 'PRESENT' %}bg-success{% elif record.status == 'SICK_PRESENT' %}bg-success{% elif record.status == 'REFUSES_PRESENT' %}bg-warning{% elif record.status == 'ABSENT' %}bg-danger{% elif record.status == 'FILL_IN' %}bg-info{% else %}bg-secondary{% endif %}">
+                                    {% if record.status == 'SICK_PRESENT' %}
+                                        <i class="bi bi-thermometer-half me-1"></i>
+                                    {% elif record.status == 'REFUSES_PRESENT' %}
+                                        <i class="bi bi-exclamation-triangle me-1"></i>
+                                    {% endif %}
+                                    {{ record.get_status_display }}
+                                </span>
                             </td>
                             <td>
                                 {% if record.status == 'FILL_IN' %}
@@ -70,8 +77,19 @@
                                 <span class="badge bg-warning">Override</span>
                             {% endif %}
                             <span class="badge bg-{{ enrollment.progress_color|default:'secondary' }} ms-1">
-                                {{ enrollment.lesson_count }} lessons
+                                {{ enrollment.actual_lessons }} lessons
                             </span>
+                            {% with balance_status=enrollment.get_balance_status %}
+                            <span class="badge bg-{{ balance_status.color }} ms-1" title="{{ balance_status.text }}">
+                                {% if enrollment.effective_deficit > 0 %}
+                                    Owes {{ enrollment.effective_deficit }}
+                                {% elif enrollment.effective_deficit < 0 %}
+                                    Credit {{ enrollment.effective_deficit|add:0|abs }}
+                                {% else %}
+                                    Balanced
+                                {% endif %}
+                            </span>
+                            {% endwith %}
                         </span>
                         <form method="post" style="display: inline;">
                             {% csrf_token %}

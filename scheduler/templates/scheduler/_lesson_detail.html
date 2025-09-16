@@ -31,6 +31,14 @@
                         <button class="btn btn-sm btn-success fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
                             <i class="bi bi-check-circle-fill me-1"></i>{{ record.get_status_display }}
                         </button>
+                    {% elif record.status == 'SICK_PRESENT' %}
+                        <button class="btn btn-sm btn-success fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
+                            <i class="bi bi-thermometer-half me-1"></i>{{ record.get_status_display }}
+                        </button>
+                    {% elif record.status == 'REFUSES_PRESENT' %}
+                        <button class="btn btn-sm btn-warning fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
+                            <i class="bi bi-exclamation-triangle me-1"></i>{{ record.get_status_display }}
+                        </button>
                     {% elif record.status == 'ABSENT' %}
                         <button class="btn btn-sm btn-danger fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
                             <i class="bi bi-x-circle-fill me-1"></i>Absent
@@ -48,6 +56,12 @@
                     {% else %} {# Status is PENDING #}
                         <button class="btn btn-sm btn-outline-success fw-semibold" hx-post="{% url 'mark-attendance' record.pk 'PRESENT' %}">
                             <i class="bi bi-check-circle me-1"></i>Present
+                        </button>
+                        <button class="btn btn-sm btn-outline-success fw-semibold" hx-post="{% url 'mark-attendance' record.pk 'SICK_PRESENT' %}" title="Student was sick but marked present">
+                            <i class="bi bi-thermometer-half me-1"></i>Sick Present
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning fw-semibold" hx-post="{% url 'mark-attendance' record.pk 'REFUSES_PRESENT' %}" title="Student present but refused to participate">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Present Refuses
                         </button>
                         <button class="btn btn-sm btn-outline-danger fw-semibold" hx-post="{% url 'mark-attendance' record.pk 'ABSENT' %}">
                             <i class="bi bi-x-circle me-1"></i>Absent

@@ -29,7 +29,12 @@
             <tr>
                 <td>{{ record.lesson_session.lesson_date|date:"d M Y" }}</td>
                 <td>
-                    <span class="{% if record.status == 'PRESENT' or record.status == 'FILL_IN' %}text-success{% elif record.status == 'ABSENT' %}text-danger{% else %}text-muted{% endif %}">
+                    <span class="{% if record.status == 'PRESENT' or record.status == 'FILL_IN' or record.status == 'SICK_PRESENT' %}text-success{% elif record.status == 'REFUSES_PRESENT' %}text-warning{% elif record.status == 'ABSENT' %}text-danger{% else %}text-muted{% endif %}">
+                        {% if record.status == 'SICK_PRESENT' %}
+                            <i class="bi bi-thermometer-half me-1"></i>
+                        {% elif record.status == 'REFUSES_PRESENT' %}
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                        {% endif %}
                         {{ record.get_status_display }}
                     </span>
                 </td>

@@ -5,7 +5,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
-from django.db.models import Exists, OuterRef, Count, Q
+from django.db.models import Exists, OuterRef, Count, Q, F
 from datetime import date, timedelta
 
 from .models import (
@@ -207,7 +207,7 @@ def student_report_view(request, student_pk, term_pk):
         .order_by('lesson_session__lesson_date').select_related('lesson_session__scheduled_group', 'lessonnote')
 
     # Calculate attendance counts
-    present_count = records.filter(status__in=['PRESENT', 'FILL_IN']).count()
+    present_count = records.filter(status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']).count()
     absent_count = records.filter(status='ABSENT').count()
 
     context = {
@@ -290,11 +290,15 @@ def manage_lesson_view(request, lesson_pk):
     present_student_ids = lesson.attendancerecord_set.all().values_list('enrollment__student_id', flat=True)
 
     # 2. Get all enrollments for the term, excluding those already in the lesson
+    # Enhanced ordering by lesson deficit (biggest deficit first)
     all_candidates = Enrollment.objects.filter(term=term) \
         .exclude(student_id__in=present_student_ids) \
         .select_related('student__school_class') \
-        .annotate(lesson_count=Count('attendancerecord', filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN']))) \
-        .order_by('lesson_count')  # Order by fewest lessons first
+        .annotate(
+            actual_lessons=Count('attendancerecord', filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT'])),
+            effective_deficit=F('adjusted_target') - Count('attendancerecord', filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']))
+        ) \
+        .order_by('-effective_deficit', 'actual_lessons')  # Biggest deficit first, then fewest actual lessons
 
     # 3. Determine which of them are "suggested" (available and not busy)
     busy_student_ids = AttendanceRecord.objects.filter(lesson_session__lesson_date=lesson.lesson_date).values_list('enrollment__student_id', flat=True)
@@ -321,8 +325,8 @@ def manage_lesson_view(request, lesson_pk):
         else:
             enrollment.is_suggested = True
 
-        # Calculate progress status
-        actual_lessons = enrollment.lesson_count
+        # Calculate progress status using the new actual_lessons annotation
+        actual_lessons = enrollment.actual_lessons
         lesson_gap = expected_lessons - actual_lessons
 
         if lesson_gap <= 1:
