@@ -201,23 +201,59 @@ class DashboardView(LoginRequiredMixin, ListView):
 
 @login_required
 def student_report_view(request, student_pk, term_pk):
-    student = get_object_or_404(Student, pk=student_pk)
-    term = get_object_or_404(Term, pk=term_pk)
-    records = AttendanceRecord.objects.filter(enrollment__student=student, enrollment__term=term) \
-        .order_by('lesson_session__lesson_date').select_related('lesson_session__scheduled_group', 'lessonnote')
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        student = get_object_or_404(Student, pk=student_pk)
+        term = get_object_or_404(Term, pk=term_pk)
+        
+        # Debug logging
+        logger.info(f"Student report requested: Student ID {student_pk} ({student}), Term ID {term_pk} ({term})")
+        
+        records = AttendanceRecord.objects.filter(enrollment__student=student, enrollment__term=term) \
+            .order_by('lesson_session__lesson_date').select_related('lesson_session__scheduled_group', 'lessonnote')
 
-    # Calculate attendance counts
-    present_count = records.filter(status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']).count()
-    absent_count = records.filter(status='ABSENT').count()
+        # Debug logging
+        logger.info(f"Found {records.count()} attendance records for {student} in {term}")
+        
+        # Calculate attendance counts
+        present_count = records.filter(status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']).count()
+        absent_count = records.filter(status='ABSENT').count()
+        
+        logger.info(f"Attendance summary: {present_count} present, {absent_count} absent")
 
-    context = {
-        'student': student,
-        'term': term,
-        'records': records,
-        'present_count': present_count,
-        'absent_count': absent_count
-    }
-    return render(request, 'scheduler/student_report.html', context)
+        context = {
+            'student': student,
+            'term': term,
+            'records': records,
+            'present_count': present_count,
+            'absent_count': absent_count
+        }
+        
+        # Add debug info to template for troubleshooting
+        if request.GET.get('debug'):
+            context['debug_info'] = {
+                'student_pk': student_pk,
+                'term_pk': term_pk,
+                'records_count': records.count(),
+                'request_path': request.path,
+                'is_htmx': request.headers.get('HX-Request', False)
+            }
+        
+        return render(request, 'scheduler/student_report.html', context)
+        
+    except Exception as e:
+        logger.error(f"Error in student_report_view: {str(e)}")
+        # Return a simple error message for debugging
+        return render(request, 'scheduler/student_report.html', {
+            'error': f"Error loading student report: {str(e)}",
+            'student': None,
+            'term': None,
+            'records': [],
+            'present_count': 0,
+            'absent_count': 0
+        })
 
 @login_required
 def manage_availability(request):

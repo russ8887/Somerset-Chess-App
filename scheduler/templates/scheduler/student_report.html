@@ -2,13 +2,36 @@
     .report-table { width: 100%; border-collapse: collapse; margin-top: 1em; }
     .report-table th, .report-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     .report-table th { background-color: #f2f2f2; }
+    .debug-info { background: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 10px 0; border-radius: 5px; }
 </style>
 
 <h3>Student Report</h3>
+
+{% if error %}
+    <div class="alert alert-danger">
+        <strong>Error:</strong> {{ error }}
+    </div>
+{% endif %}
+
+{% if debug_info %}
+    <div class="debug-info">
+        <strong>Debug Info:</strong><br>
+        Student PK: {{ debug_info.student_pk }}<br>
+        Term PK: {{ debug_info.term_pk }}<br>
+        Records Count: {{ debug_info.records_count }}<br>
+        Request Path: {{ debug_info.request_path }}<br>
+        Is HTMX: {{ debug_info.is_htmx }}
+    </div>
+{% endif %}
+
+{% if student and term %}
 <p>
     <strong>Student:</strong> {{ student }}<br>
     <strong>Term:</strong> {{ term.name }}
 </p>
+{% else %}
+<p><em>Student or term information not available</em></p>
+{% endif %}
 
 <div class="mb-3">
     <span class="badge bg-success me-2">{{ present_count }} present</span>
