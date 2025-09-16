@@ -208,8 +208,9 @@ def student_report_view(request, student_pk, term_pk):
         student = get_object_or_404(Student, pk=student_pk)
         term = get_object_or_404(Term, pk=term_pk)
         
-        # Get the viewing date from request for back navigation
+        # Get the viewing date and coach from request for back navigation
         view_date = request.GET.get('date', date.today().isoformat())
+        view_coach = request.GET.get('coach', '')
         
         # Debug logging
         logger.info(f"Student report requested: Student ID {student_pk} ({student}), Term ID {term_pk} ({term})")
@@ -254,6 +255,7 @@ def student_report_view(request, student_pk, term_pk):
             'term': term,
             'records': records,
             'view_date': view_date,
+            'view_coach': view_coach,
             # Detailed attendance counts
             'regular_present_count': regular_present_count,
             'sick_present_count': sick_present_count,
