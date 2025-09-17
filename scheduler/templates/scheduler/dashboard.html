@@ -87,6 +87,26 @@
                 </div>
             </div>
             
+            <!-- Quick Actions Panel -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-lightning-fill"></i> Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <a href="{% url 'manage-availability' %}" class="btn btn-outline-primary btn-sm mb-2 w-100">
+                        <i class="bi bi-calendar-x"></i> Manage Class Availability
+                    </a>
+                    {% if user.is_staff %}
+                        <a href="{% url 'admin:scheduler_oneoffevent_changelist' %}" class="btn btn-outline-warning btn-sm mb-2 w-100">
+                            <i class="bi bi-calendar-event"></i> Manage One-Off Events
+                        </a>
+                        <a href="{% url 'admin:index' %}" class="btn btn-outline-secondary btn-sm mb-2 w-100">
+                            <i class="bi bi-gear"></i> Admin Panel
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
             <!-- Student Report Panel -->
             <div class="card mt-3">
                 <div class="card-header">

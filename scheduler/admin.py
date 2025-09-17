@@ -3,7 +3,7 @@
 from django.contrib import admin
 from .models import (
     Term, TimeSlot, SchoolClass, Coach, Student, Enrollment,
-    ScheduledGroup, ScheduledUnavailability, LessonSession, AttendanceRecord, LessonNote
+    ScheduledGroup, ScheduledUnavailability, OneOffEvent, LessonSession, AttendanceRecord, LessonNote
 )
 
 # --- Configuration for Basic Models ---
@@ -209,3 +209,163 @@ class ScheduledUnavailabilityAdmin(admin.ModelAdmin):
     list_filter = ('day_of_week',)
     search_fields = ('name',)
     filter_horizontal = ('students', 'school_classes')
+
+# --- Configuration for One-Off Event Admin ---
+@admin.register(OneOffEvent)
+class OneOffEventAdmin(admin.ModelAdmin):
+    list_display = ('name', 'event_date', 'get_time_slots_display', 'get_affected_groups_display', 'reason')
+    list_filter = ('event_date', 'reason', 'school_classes')
+    search_fields = ('name', 'reason')
+    filter_horizontal = ('students', 'school_classes', 'time_slots')
+    date_hierarchy = 'event_date'
+    ordering = ('-event_date',)
+    
+    def changelist_view(self, request, extra_context=None):
+        """Add context data for the custom template"""
+        from datetime import date, timedelta
+        
+        extra_context = extra_context or {}
+        extra_context['today'] = date.today()
+        extra_context['next_week'] = date.today() + timedelta(days=7)
+        
+        return super().changelist_view(request, extra_context=extra_context)
+    
+    fieldsets = (
+        ('Event Details', {
+            'fields': ('name', 'event_date', 'reason')
+        }),
+        ('Time Slots', {
+            'fields': ('time_slots',),
+            'description': 'Select specific time slots affected by this event. Leave blank for an all-day event.'
+        }),
+        ('Affected Students', {
+            'fields': ('school_classes', 'students'),
+            'description': 'Select school classes and/or individual students affected by this event.'
+        }),
+    )
+    
+    actions = ['create_public_holiday', 'create_pupil_free_day', 'create_whole_school_event']
+    
+    @admin.display(description='Time Slots')
+    def get_time_slots_display(self, obj):
+        if obj.time_slots.exists():
+            slots = obj.time_slots.all()[:3]  # Show first 3 slots
+            display = ', '.join([str(slot) for slot in slots])
+            if obj.time_slots.count() > 3:
+                display += f' (+{obj.time_slots.count() - 3} more)'
+            return display
+        return 'All Day'
+    
+    @admin.display(description='Affected Groups')
+    def get_affected_groups_display(self, obj):
+        groups = []
+        if obj.school_classes.exists():
+            classes = list(obj.school_classes.values_list('name', flat=True))
+            if len(classes) <= 3:
+                groups.extend(classes)
+            else:
+                groups.extend(classes[:2])
+                groups.append(f'+{len(classes) - 2} more classes')
+        
+        if obj.students.exists():
+            student_count = obj.students.count()
+            if student_count <= 2:
+                students = [str(s) for s in obj.students.all()]
+                groups.extend(students)
+            else:
+                groups.append(f'{student_count} individual students')
+        
+        return ', '.join(groups) if groups else 'No specific targets'
+    
+    @admin.action(description='Create Public Holiday event for selected dates')
+    def create_public_holiday(self, request, queryset):
+        """Create public holiday events that affect all students"""
+        from django.contrib import messages
+        from datetime import date
+        
+        # Get today's date as default
+        today = date.today()
+        
+        # Create a public holiday event for today (can be customized)
+        event, created = OneOffEvent.objects.get_or_create(
+            name=f'Public Holiday - {today.strftime("%B %d, %Y")}',
+            event_date=today,
+            defaults={
+                'reason': 'Public Holiday'
+            }
+        )
+        
+        if created:
+            # Add all school classes to make it affect everyone
+            all_classes = SchoolClass.objects.all()
+            event.school_classes.set(all_classes)
+            messages.success(request, f'Public Holiday event created for {today.strftime("%B %d, %Y")}. All students will be marked absent.')
+        else:
+            messages.info(request, f'Public Holiday event already exists for {today.strftime("%B %d, %Y")}.')
+    
+    @admin.action(description='Create Pupil Free Day event for selected dates')
+    def create_pupil_free_day(self, request, queryset):
+        """Create pupil free day events that affect all students"""
+        from django.contrib import messages
+        from datetime import date
+        
+        # Get today's date as default
+        today = date.today()
+        
+        # Create a pupil free day event for today (can be customized)
+        event, created = OneOffEvent.objects.get_or_create(
+            name=f'Pupil Free Day - {today.strftime("%B %d, %Y")}',
+            event_date=today,
+            defaults={
+                'reason': 'Pupil Free Day'
+            }
+        )
+        
+        if created:
+            # Add all school classes to make it affect everyone
+            all_classes = SchoolClass.objects.all()
+            event.school_classes.set(all_classes)
+            messages.success(request, f'Pupil Free Day event created for {today.strftime("%B %d, %Y")}. All students will be marked absent.')
+        else:
+            messages.info(request, f'Pupil Free Day event already exists for {today.strftime("%B %d, %Y")}.')
+    
+    @admin.action(description='Create whole school event for selected dates')
+    def create_whole_school_event(self, request, queryset):
+        """Create custom whole school events"""
+        from django.contrib import messages
+        from datetime import date
+        
+        # Get today's date as default
+        today = date.today()
+        
+        # Create a generic whole school event for today (can be customized)
+        event, created = OneOffEvent.objects.get_or_create(
+            name=f'Whole School Event - {today.strftime("%B %d, %Y")}',
+            event_date=today,
+            defaults={
+                'reason': 'School Event'
+            }
+        )
+        
+        if created:
+            # Add all school classes to make it affect everyone
+            all_classes = SchoolClass.objects.all()
+            event.school_classes.set(all_classes)
+            messages.success(request, f'Whole School Event created for {today.strftime("%B %d, %Y")}. All students will be marked absent.')
+        else:
+            messages.info(request, f'Whole School Event already exists for {today.strftime("%B %d, %Y")}.')
+    
+    def save_model(self, request, obj, form, change):
+        """Override save to provide user feedback"""
+        super().save_model(request, obj, form, change)
+        from django.contrib import messages
+        
+        if not change:  # New object
+            affected_count = 0
+            if obj.school_classes.exists():
+                affected_count += sum(sc.student_set.count() for sc in obj.school_classes.all())
+            if obj.students.exists():
+                affected_count += obj.students.count()
+            
+            time_info = "all day" if not obj.time_slots.exists() else f"{obj.time_slots.count()} time slots"
+            messages.success(request, f'Event "{obj.name}" created successfully. Will affect approximately {affected_count} students for {time_info} on {obj.event_date}.')
