@@ -1,0 +1,309 @@
+{% extends "scheduler/base.html" %}
+{% load static %}
+
+{% block title %}Create Camp Event - Somerset Chess Scheduler{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .step-indicator {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+    }
+    .preview-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #eee;
+    }
+    .preview-item:last-child {
+        border-bottom: none;
+    }
+    .year-level-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .year-level-option {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background: white;
+        transition: all 0.2s;
+    }
+    .year-level-option:hover {
+        background: #f8f9fa;
+        border-color: #28a745;
+    }
+    .year-level-option input[type="checkbox"] {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-campground text-success"></i>
+                        Create Camp Event
+                    </h1>
+                    <p class="text-muted mb-0">Create a multi-day camp event for specific year levels</p>
+                </div>
+                <div>
+                    <a href="{% url 'event-management-dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Events
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Form Section -->
+        <div class="col-md-8">
+            <div class="form-section">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="step-indicator me-3">1</div>
+                    <h5 class="mb-0">Camp Details</h5>
+                </div>
+
+                <form method="post" id="camp-form">
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.camp_name.id_for_label }}" class="form-label">
+                                    {{ form.camp_name.label }}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                {{ form.camp_name }}
+                                {% if form.camp_name.errors %}
+                                    <div class="text-danger small">{{ form.camp_name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.start_date.id_for_label }}" class="form-label">
+                                    {{ form.start_date.label }}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                {{ form.start_date }}
+                                {% if form.start_date.errors %}
+                                    <div class="text-danger small">{{ form.start_date.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.end_date.id_for_label }}" class="form-label">
+                                    {{ form.end_date.label }}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                {{ form.end_date }}
+                                {% if form.end_date.errors %}
+                                    <div class="text-danger small">{{ form.end_date.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">
+                            {{ form.year_levels.label }}
+                            <span class="text-danger">*</span>
+                        </label>
+                        <div class="year-level-grid">
+                            {% for choice in form.year_levels %}
+                                <div class="year-level-option">
+                                    {{ choice.tag }}
+                                    <label for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if form.year_levels.errors %}
+                            <div class="text-danger small">{{ form.year_levels.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-primary" onclick="previewCampEvent()">
+                            <i class="fas fa-eye"></i> Preview Camp
+                        </button>
+                        <div>
+                            <a href="{% url 'event-management-dashboard' %}" class="btn btn-secondary me-2">Cancel</a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-campground"></i> Create Camp Events
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle text-info"></i>
+                        Camp Preview
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="preview-content">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-campground fa-2x mb-2"></i>
+                            <p>Fill in the form to see a preview of your camp events</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Panel -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-lightbulb text-warning"></i>
+                        How Camp Events Work
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="small">
+                        <p><strong>Multi-Day Events:</strong></p>
+                        <p>Separate events will be created for each day of the camp (e.g., "Year 4 Camp - Day 1", "Day 2", etc.)</p>
+                        
+                        <hr>
+                        
+                        <p><strong>Year Level Targeting:</strong></p>
+                        <ul class="mb-0">
+                            <li>Select one or more year levels</li>
+                            <li>All classes in those year levels will be affected</li>
+                            <li>Students will be marked absent with "School Camp" reason</li>
+                            <li>Events are processed automatically when coaches view dashboards</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewCampEvent() {
+    const form = document.getElementById('camp-form');
+    const formData = new FormData(form);
+    formData.append('event_type', 'camp');
+    
+    fetch('{% url "event-preview" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        const previewContent = document.getElementById('preview-content');
+        
+        if (data.valid) {
+            previewContent.innerHTML = `
+                <div class="preview-item">
+                    <strong>Camp Name:</strong>
+                    <span>${data.event_name}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Duration:</strong>
+                    <span>${data.date_range}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Days:</strong>
+                    <span class="badge badge-info">${data.duration}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Year Levels:</strong>
+                    <span>${data.affected_groups}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Students per Day:</strong>
+                    <span class="badge badge-primary">${data.affected_students}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Events Created:</strong>
+                    <span class="badge badge-success">${data.events_created}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Total Student-Days:</strong>
+                    <span class="badge badge-warning">${data.total_student_days}</span>
+                </div>
+                <div class="mt-3 p-2 bg-success text-white rounded text-center">
+                    <i class="fas fa-check-circle"></i>
+                    Ready to create camp!
+                </div>
+            `;
+        } else {
+            let errorHtml = '<div class="alert alert-danger"><strong>Please fix these errors:</strong><ul class="mb-0">';
+            for (const [field, errors] of Object.entries(data.errors)) {
+                for (const error of errors) {
+                    errorHtml += `<li>${field}: ${error}</li>`;
+                }
+            }
+            errorHtml += '</ul></div>';
+            previewContent.innerHTML = errorHtml;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('preview-content').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                Error loading preview. Please check your form data.
+            </div>
+        `;
+    });
+}
+
+// Auto-preview when form changes
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('camp-form');
+    const inputs = form.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(input => {
+        input.addEventListener('change', function() {
+            setTimeout(previewCampEvent, 500);
+        });
+    });
+});
+</script>
+{% endblock %}

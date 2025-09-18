@@ -1,6 +1,6 @@
 from django.urls import path
 from django.contrib.auth.views import LogoutView
-from . import views
+from . import views, event_views
 
 urlpatterns = [
     # Main pages
@@ -22,4 +22,18 @@ urlpatterns = [
     path('note/<int:pk>/edit/', views.edit_lesson_note, name='edit-note'),
 
     # The old fill-in URLs below have been removed as they are now obsolete.
+    
+    # --- Event Management URLs ---
+    path('events/', event_views.event_management_dashboard, name='event-management-dashboard'),
+    path('events/create/public-holiday/', event_views.create_public_holiday, name='create-public-holiday'),
+    path('events/create/pupil-free-day/', event_views.create_pupil_free_day, name='create-pupil-free-day'),
+    path('events/create/camp/', event_views.create_camp_event, name='create-camp-event'),
+    path('events/create/excursion/', event_views.create_excursion_event, name='create-excursion-event'),
+    path('events/create/individual/', event_views.create_individual_event, name='create-individual-event'),
+    path('events/create/custom/', event_views.create_custom_event, name='create-custom-event'),
+    path('events/<int:event_id>/', event_views.event_detail, name='event-detail'),
+    path('events/<int:event_id>/delete/', event_views.delete_event, name='delete-event'),
+    path('events/preview/', event_views.event_preview, name='event-preview'),
+    path('events/quick-actions/', event_views.quick_event_actions, name='quick-event-actions'),
+    path('api/search-students/', event_views.search_students, name='search-students'),
 ]

@@ -1,0 +1,52 @@
+{% extends "scheduler/base.html" %}
+
+{% block title %}Delete {{ event.name }} - Somerset Chess Scheduler{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Confirm Event Deletion
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <strong>Warning:</strong> This action cannot be undone.
+                    </div>
+                    
+                    <p>Are you sure you want to delete the following event?</p>
+                    
+                    <div class="bg-light p-3 rounded mb-3">
+                        <h6><strong>{{ event.name }}</strong></h6>
+                        <p class="mb-1"><strong>Type:</strong> {{ event.get_event_type_display }}</p>
+                        <p class="mb-1"><strong>Date:</strong> {{ event.get_date_range_display }}</p>
+                        <p class="mb-1"><strong>Students Affected:</strong> ~{{ event.get_affected_students_count }}</p>
+                        <p class="mb-0"><strong>Reason:</strong> {{ event.reason }}</p>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <strong>Note:</strong> Deleting this event will not affect any attendance records that have already been processed.
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'event-detail' event.id %}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Cancel
+                        </a>
+                        <form method="post" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash"></i> Delete Event
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

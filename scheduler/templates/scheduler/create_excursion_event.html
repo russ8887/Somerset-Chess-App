@@ -1,0 +1,336 @@
+{% extends "scheduler/base.html" %}
+{% load static %}
+
+{% block title %}Create Class Excursion - Somerset Chess Scheduler{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .step-indicator {
+        background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+        color: white;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+    }
+    .preview-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #eee;
+    }
+    .preview-item:last-child {
+        border-bottom: none;
+    }
+    .class-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .class-option {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background: white;
+        transition: all 0.2s;
+    }
+    .class-option:hover {
+        background: #f8f9fa;
+        border-color: #6f42c1;
+    }
+    .class-option input[type="checkbox"] {
+        margin-right: 0.5rem;
+    }
+    .time-slot-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .time-slot-option {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background: white;
+        transition: all 0.2s;
+    }
+    .time-slot-option:hover {
+        background: #f8f9fa;
+        border-color: #6f42c1;
+    }
+    .time-slot-option input[type="checkbox"] {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-bus text-purple"></i>
+                        Create Class Excursion
+                    </h1>
+                    <p class="text-muted mb-0">Create an excursion event for specific classes</p>
+                </div>
+                <div>
+                    <a href="{% url 'event-management-dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Events
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Form Section -->
+        <div class="col-md-8">
+            <div class="form-section">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="step-indicator me-3">1</div>
+                    <h5 class="mb-0">Excursion Details</h5>
+                </div>
+
+                <form method="post" id="excursion-form">
+                    {% csrf_token %}
+                    
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.excursion_name.id_for_label }}" class="form-label">
+                                    {{ form.excursion_name.label }}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                {{ form.excursion_name }}
+                                {% if form.excursion_name.errors %}
+                                    <div class="text-danger small">{{ form.excursion_name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.event_date.id_for_label }}" class="form-label">
+                                    {{ form.event_date.label }}
+                                    <span class="text-danger">*</span>
+                                </label>
+                                {{ form.event_date }}
+                                {% if form.event_date.errors %}
+                                    <div class="text-danger small">{{ form.event_date.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">
+                            {{ form.school_classes.label }}
+                            <span class="text-danger">*</span>
+                        </label>
+                        <div class="class-grid">
+                            {% for choice in form.school_classes %}
+                                <div class="class-option">
+                                    {{ choice.tag }}
+                                    <label for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if form.school_classes.errors %}
+                            <div class="text-danger small">{{ form.school_classes.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">
+                            {{ form.time_slots.label }}
+                        </label>
+                        <p class="small text-muted">{{ form.time_slots.help_text }}</p>
+                        <div class="time-slot-grid">
+                            {% for choice in form.time_slots %}
+                                <div class="time-slot-option">
+                                    {{ choice.tag }}
+                                    <label for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if form.time_slots.errors %}
+                            <div class="text-danger small">{{ form.time_slots.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-primary" onclick="previewExcursionEvent()">
+                            <i class="fas fa-eye"></i> Preview Excursion
+                        </button>
+                        <div>
+                            <a href="{% url 'event-management-dashboard' %}" class="btn btn-secondary me-2">Cancel</a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-bus"></i> Create Excursion
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle text-info"></i>
+                        Excursion Preview
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="preview-content">
+                        <div class="text-center text-muted">
+                            <i class="fas fa-bus fa-2x mb-2"></i>
+                            <p>Fill in the form to see a preview of your excursion</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Panel -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-lightbulb text-warning"></i>
+                        How Excursions Work
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="small">
+                        <p><strong>Class Selection:</strong></p>
+                        <p>Select one or more classes going on the excursion together</p>
+                        
+                        <hr>
+                        
+                        <p><strong>Time Options:</strong></p>
+                        <ul>
+                            <li><strong>All Day:</strong> Leave time slots blank for full-day excursions</li>
+                            <li><strong>Specific Times:</strong> Select time slots for partial-day excursions</li>
+                        </ul>
+                        
+                        <hr>
+                        
+                        <p><strong>Processing:</strong></p>
+                        <ul class="mb-0">
+                            <li>Students will be marked absent with "Class Excursion" reason</li>
+                            <li>Events are processed automatically when coaches view dashboards</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewExcursionEvent() {
+    const form = document.getElementById('excursion-form');
+    const formData = new FormData(form);
+    formData.append('event_type', 'excursion');
+    
+    fetch('{% url "event-preview" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        const previewContent = document.getElementById('preview-content');
+        
+        if (data.valid) {
+            previewContent.innerHTML = `
+                <div class="preview-item">
+                    <strong>Excursion Name:</strong>
+                    <span>${data.event_name}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Date:</strong>
+                    <span>${data.event_date}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Classes:</strong>
+                    <span>${data.affected_groups}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Students Affected:</strong>
+                    <span class="badge badge-primary">${data.affected_students}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Duration:</strong>
+                    <span>${data.time_slots}</span>
+                </div>
+                <div class="preview-item">
+                    <strong>Reason:</strong>
+                    <span>${data.reason}</span>
+                </div>
+                <div class="mt-3 p-2 bg-success text-white rounded text-center">
+                    <i class="fas fa-check-circle"></i>
+                    Ready to create excursion!
+                </div>
+            `;
+        } else {
+            let errorHtml = '<div class="alert alert-danger"><strong>Please fix these errors:</strong><ul class="mb-0">';
+            for (const [field, errors] of Object.entries(data.errors)) {
+                for (const error of errors) {
+                    errorHtml += `<li>${field}: ${error}</li>`;
+                }
+            }
+            errorHtml += '</ul></div>';
+            previewContent.innerHTML = errorHtml;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('preview-content').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                Error loading preview. Please check your form data.
+            </div>
+        `;
+    });
+}
+
+// Auto-preview when form changes
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('excursion-form');
+    const inputs = form.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(input => {
+        input.addEventListener('change', function() {
+            setTimeout(previewExcursionEvent, 500);
+        });
+    });
+});
+</script>
+{% endblock %}

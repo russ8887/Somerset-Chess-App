@@ -160,15 +160,100 @@ class ScheduledUnavailability(models.Model):
         return self.name
 
 class OneOffEvent(models.Model):
+    class EventType(models.TextChoices):
+        PUBLIC_HOLIDAY = 'PUBLIC_HOLIDAY', 'Public Holiday'
+        PUPIL_FREE_DAY = 'PUPIL_FREE_DAY', 'Pupil Free Day'
+        CAMP = 'CAMP', 'Camp'
+        EXCURSION = 'EXCURSION', 'Class Excursion'
+        INDIVIDUAL = 'INDIVIDUAL', 'Individual Students'
+        CUSTOM = 'CUSTOM', 'Custom Event'
+    
     name = models.CharField(max_length=200, help_text="e.g., Year 4 Camp, Public Holiday")
+    event_type = models.CharField(max_length=20, choices=EventType.choices, default=EventType.CUSTOM, blank=True)
     event_date = models.DateField()
+    end_date = models.DateField(blank=True, null=True, help_text="For multi-day events like camps")
     time_slots = models.ManyToManyField(TimeSlot, blank=True, help_text="Select one or more time slots. Leave blank for an all-day event.")
     students = models.ManyToManyField(Student, blank=True)
     school_classes = models.ManyToManyField(SchoolClass, blank=True)
+    year_levels = models.CharField(max_length=50, blank=True, help_text="Comma-separated year levels (e.g., '3,4,5')")
     reason = models.CharField(max_length=255, help_text="Reason for absence, e.g., 'School Excursion'")
+    is_processed = models.BooleanField(default=False, help_text="Whether this event has been processed")
+    created_by = models.ForeignKey('Coach', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-event_date', '-created_at']
     
     def __str__(self):
+        if self.end_date and self.end_date != self.event_date:
+            return f"{self.name} ({self.event_date} to {self.end_date})"
         return f"{self.name} on {self.event_date}"
+    
+    def get_affected_students_count(self):
+        """Calculate total number of students affected by this event"""
+        count = 0
+        
+        # Count students from school classes
+        for school_class in self.school_classes.all():
+            count += school_class.student_set.count()
+        
+        # Add individual students (avoiding double counting)
+        individual_students = self.students.exclude(
+            school_class__in=self.school_classes.all()
+        )
+        count += individual_students.count()
+        
+        return count
+    
+    def get_date_range_display(self):
+        """Get a nice display of the date range"""
+        if self.end_date and self.end_date != self.event_date:
+            return f"{self.event_date.strftime('%b %d')} - {self.end_date.strftime('%b %d, %Y')}"
+        return self.event_date.strftime('%b %d, %Y')
+    
+    def is_multi_day(self):
+        """Check if this is a multi-day event"""
+        return self.end_date and self.end_date != self.event_date
+    
+    def get_duration_days(self):
+        """Get the number of days this event spans"""
+        if self.end_date:
+            return (self.end_date - self.event_date).days + 1
+        return 1
+    
+    @classmethod
+    def create_multi_day_event(cls, name, event_type, start_date, end_date, **kwargs):
+        """Create multiple single-day events for a multi-day period"""
+        from datetime import timedelta
+        
+        events = []
+        current_date = start_date
+        day_count = 1
+        total_days = (end_date - start_date).days + 1
+        
+        while current_date <= end_date:
+            event_name = f"{name} - Day {day_count}" if total_days > 1 else name
+            
+            event = cls.objects.create(
+                name=event_name,
+                event_type=event_type,
+                event_date=current_date,
+                **kwargs
+            )
+            
+            # Copy many-to-many relationships
+            if 'school_classes' in kwargs:
+                event.school_classes.set(kwargs['school_classes'])
+            if 'students' in kwargs:
+                event.students.set(kwargs['students'])
+            if 'time_slots' in kwargs:
+                event.time_slots.set(kwargs['time_slots'])
+            
+            events.append(event)
+            current_date += timedelta(days=1)
+            day_count += 1
+        
+        return events
 
 class LessonSession(models.Model):
     scheduled_group = models.ForeignKey(ScheduledGroup, on_delete=models.CASCADE)
