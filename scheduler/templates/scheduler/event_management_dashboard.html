@@ -352,23 +352,46 @@ function quickCreateEventWithDate(eventType, date = null) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show success message
+            // Show success message at the top of the container
             const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
             alertDiv.innerHTML = `
                 <strong>Success!</strong> ${data.message}
-                <button type="button" class="close" data-dismiss="alert">
-                    <span>&times;</span>
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
                 </button>
             `;
-            document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.row'));
             
-            // Reload page after 2 seconds
+            // Insert after the header row
+            const headerRow = document.querySelector('.container-fluid .row');
+            if (headerRow && headerRow.nextSibling) {
+                headerRow.parentNode.insertBefore(alertDiv, headerRow.nextSibling);
+            } else {
+                // Fallback: prepend to container
+                document.querySelector('.container-fluid').prepend(alertDiv);
+            }
+            
+            // Reload page after 3 seconds
             setTimeout(() => {
                 location.reload();
-            }, 2000);
+            }, 3000);
         } else {
-            alert('Error: ' + (data.error || 'Unknown error occurred'));
+            // Show error message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show mt-3';
+            alertDiv.innerHTML = `
+                <strong>Error!</strong> ${data.error || 'Unknown error occurred'}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            `;
+            
+            const headerRow = document.querySelector('.container-fluid .row');
+            if (headerRow && headerRow.nextSibling) {
+                headerRow.parentNode.insertBefore(alertDiv, headerRow.nextSibling);
+            } else {
+                document.querySelector('.container-fluid').prepend(alertDiv);
+            }
         }
     })
     .catch(error => {

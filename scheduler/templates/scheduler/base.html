@@ -10,6 +10,147 @@
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32'><defs><style>.chess-piece { fill: #000; }</style></defs><!-- Simple chess queen silhouette --><path class='chess-piece' d='M16 2c-1.1 0-2 .9-2 2v2h-2v2h2v2c-2.2 0-4 1.8-4 4h2c0-1.1.9-2 2-2s2 .9 2 2h2c0-2.2-1.8-4-4-4V8h2V6h-2V4c0-1.1-.9-2-2-2z'/><rect class='chess-piece' x='12' y='14' width='8' height='12'/><rect class='chess-piece' x='10' y='26' width='12' height='4'/></svg>" type="image/svg+xml">
+    
+    <!-- Enhanced UI Styles -->
+    <style>
+        /* Fix dropdown visibility issues */
+        select.form-control, select.form-select {
+            background-color: #ffffff !important;
+            color: #212529 !important;
+            border: 1px solid #ced4da !important;
+            padding: 0.375rem 2.25rem 0.375rem 0.75rem !important;
+        }
+        
+        select.form-control option, select.form-select option {
+            background-color: #ffffff !important;
+            color: #212529 !important;
+            padding: 0.5rem !important;
+        }
+        
+        select.form-control:focus, select.form-select:focus {
+            border-color: #86b7fe !important;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+        }
+        
+        /* Improve checkbox and radio visibility */
+        .form-check-input {
+            width: 1.2em !important;
+            height: 1.2em !important;
+            margin-top: 0.1em !important;
+        }
+        
+        .form-check-label {
+            margin-left: 0.5rem !important;
+            font-weight: 500 !important;
+        }
+        
+        /* Enhanced form styling */
+        .form-label {
+            font-weight: 600 !important;
+            color: #495057 !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 0.375rem !important;
+            border: 1px solid #ced4da !important;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out !important;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #86b7fe !important;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+        }
+        
+        /* Better button styling */
+        .btn {
+            border-radius: 0.375rem !important;
+            font-weight: 500 !important;
+            transition: all 0.15s ease-in-out !important;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+        }
+        
+        /* Card enhancements */
+        .card {
+            border-radius: 0.5rem !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+            transition: box-shadow 0.15s ease-in-out !important;
+        }
+        
+        .card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+        }
+        
+        /* Alert improvements */
+        .alert {
+            border-radius: 0.5rem !important;
+            border: none !important;
+            font-weight: 500 !important;
+        }
+        
+        /* Badge improvements */
+        .badge {
+            font-weight: 500 !important;
+            padding: 0.35em 0.65em !important;
+        }
+        
+        /* Table improvements */
+        .table {
+            border-radius: 0.5rem !important;
+            overflow: hidden !important;
+        }
+        
+        .table th {
+            background-color: #f8f9fa !important;
+            font-weight: 600 !important;
+            border-bottom: 2px solid #dee2e6 !important;
+        }
+        
+        /* Modal improvements */
+        .modal-content {
+            border-radius: 0.5rem !important;
+            border: none !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2) !important;
+        }
+        
+        /* Loading states */
+        .btn.loading {
+            pointer-events: none !important;
+            opacity: 0.6 !important;
+        }
+        
+        .btn.loading::after {
+            content: "" !important;
+            display: inline-block !important;
+            width: 1rem !important;
+            height: 1rem !important;
+            margin-left: 0.5rem !important;
+            border: 2px solid transparent !important;
+            border-top-color: currentColor !important;
+            border-radius: 50% !important;
+            animation: spin 1s linear infinite !important;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Responsive improvements */
+        @media (max-width: 768px) {
+            .container-fluid {
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+            
+            .btn-group-vertical .btn {
+                margin-bottom: 0.5rem !important;
+            }
+        }
+    </style>
 
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
