@@ -72,7 +72,7 @@ def create_public_holiday(request):
                 f'Public Holiday "{event.name}" created successfully! '
                 f'Will affect approximately {affected_count} students.'
             )
-            return redirect('event_management_dashboard')
+        return redirect('event-management-dashboard')
     else:
         form = PublicHolidayForm()
     
@@ -108,7 +108,7 @@ def create_pupil_free_day(request):
                 f'Pupil Free Day "{event.name}" created successfully! '
                 f'Will affect approximately {affected_count} students.'
             )
-            return redirect('event_management_dashboard')
+            return redirect('event-management-dashboard')
     else:
         form = PupilFreeDayForm()
     
@@ -145,7 +145,7 @@ def create_camp_event(request):
                 f'Camp events created successfully! {len(events)} events created '
                 f'affecting approximately {total_affected} student-days.'
             )
-            return redirect('event_management_dashboard')
+            return redirect('event-management-dashboard')
     else:
         form = CampEventForm()
     
@@ -183,7 +183,7 @@ def create_excursion_event(request):
                 f'Excursion "{event.name}" created successfully! '
                 f'Will affect approximately {affected_count} students for {time_info}.'
             )
-            return redirect('event_management_dashboard')
+            return redirect('event-management-dashboard')
     else:
         form = ExcursionEventForm()
     
@@ -221,7 +221,7 @@ def create_individual_event(request):
                 f'Individual event "{event.name}" created successfully! '
                 f'Will affect {affected_count} students for {time_info}.'
             )
-            return redirect('event_management_dashboard')
+        return redirect('event-management-dashboard')
     else:
         form = IndividualStudentEventForm()
     
@@ -257,7 +257,7 @@ def create_custom_event(request):
                 f'Custom event "{event.name}" created successfully! '
                 f'Will affect approximately {affected_count} students.'
             )
-            return redirect('event_management_dashboard')
+        return redirect('event-management-dashboard')
     else:
         form = CustomEventForm()
     
@@ -422,7 +422,7 @@ def delete_event(request, event_id):
         event_name = event.name
         event.delete()
         messages.success(request, f'Event "{event_name}" has been deleted.')
-        return redirect('event_management_dashboard')
+        return redirect('event-management-dashboard')
     
     context = {
         'event': event,
