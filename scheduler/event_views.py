@@ -429,7 +429,7 @@ def delete_event(request, event_id):
         'affected_students_count': event.get_affected_students_count(),
     }
     
-    return render(request, 'scheduler/delete_event_confirm.html', context)
+    return render(request, 'scheduler/delete_event.html', context)
 
 @login_required
 def quick_event_actions(request):
