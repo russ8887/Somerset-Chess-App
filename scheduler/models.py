@@ -55,6 +55,31 @@ class Coach(models.Model):
     user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True)
     is_head_coach = models.BooleanField(default=False, help_text="Head coaches can view all other coaches' schedules.")
     
+    # Coach specialization fields for intelligent slot finder
+    specializes_beginner = models.BooleanField(
+        default=True, 
+        help_text="Coach is effective with beginner students"
+    )
+    specializes_intermediate = models.BooleanField(
+        default=True, 
+        help_text="Coach is effective with intermediate students"
+    )
+    specializes_advanced = models.BooleanField(
+        default=False, 
+        help_text="Coach is effective with advanced students"
+    )
+    
+    # Coach workload preferences
+    max_students_per_lesson = models.IntegerField(
+        default=4, 
+        help_text="Maximum students this coach prefers per lesson"
+    )
+    preferred_group_sizes = models.CharField(
+        max_length=20,
+        default='PAIR,GROUP',
+        help_text="Comma-separated preferred group sizes (SOLO,PAIR,GROUP)"
+    )
+    
     # REMOVED: first_name, last_name, and email to avoid duplicating data from the User model.
     # We will now pull this information directly from the linked user.
 
@@ -67,12 +92,44 @@ class Coach(models.Model):
         if self.user:
             return self.user.get_full_name()
         return f"Coach ID: {self.pk} (No User Linked)"
+    
+    def specializes_in_skill_level(self, skill_level):
+        """Check if coach specializes in a specific skill level"""
+        skill_mapping = {
+            'B': self.specializes_beginner,
+            'I': self.specializes_intermediate,
+            'A': self.specializes_advanced,
+        }
+        return skill_mapping.get(skill_level, False)
+    
+    def get_preferred_group_sizes_list(self):
+        """Get list of preferred group sizes"""
+        return [size.strip() for size in self.preferred_group_sizes.split(',') if size.strip()]
 
 class Student(models.Model):
+    class SkillLevel(models.TextChoices):
+        BEGINNER = 'B', 'Beginner'
+        INTERMEDIATE = 'I', 'Intermediate'
+        ADVANCED = 'A', 'Advanced'
+    
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     year_level = models.IntegerField(help_text="e.g., 3 for Year 3")
     school_class = models.ForeignKey(SchoolClass, on_delete=models.SET_NULL, null=True, blank=True)
+    skill_level = models.CharField(
+        max_length=1, 
+        choices=SkillLevel.choices, 
+        default=SkillLevel.BEGINNER,
+        help_text="Chess skill level: Beginner, Intermediate, or Advanced"
+    )
+    
+    # Student preferences for slot finder
+    preferred_group_size = models.CharField(
+        max_length=5,
+        choices=[('SOLO', 'Solo'), ('PAIR', 'Pair'), ('GROUP', 'Group')],
+        default='GROUP',
+        help_text="Preferred lesson group size"
+    )
 
     def __str__(self):
         # Safely gets the school class name if it exists.
@@ -220,9 +277,82 @@ class ScheduledGroup(models.Model):
         
     day_of_week = models.IntegerField(choices=DayOfWeek.choices)
     time_slot = models.ForeignKey(TimeSlot, on_delete=models.PROTECT, null=True)
+    
+    # Enhanced fields for intelligent slot finder
+    target_skill_level = models.CharField(
+        max_length=1,
+        choices=Student.SkillLevel.choices,
+        default=Student.SkillLevel.BEGINNER,
+        help_text="Target skill level for this group"
+    )
+    max_capacity = models.IntegerField(
+        default=4,
+        help_text="Maximum number of students in this group"
+    )
+    preferred_size = models.IntegerField(
+        default=3,
+        help_text="Preferred number of students in this group"
+    )
+    
+    # Group type for matching preferences
+    group_type = models.CharField(
+        max_length=5,
+        choices=[('SOLO', 'Solo'), ('PAIR', 'Pair'), ('GROUP', 'Group')],
+        default='GROUP',
+        help_text="Type of group (Solo, Pair, or Group)"
+    )
 
     def __str__(self):
         return self.name
+    
+    def get_current_size(self):
+        """Get current number of students in group"""
+        return self.members.count()
+    
+    def has_space(self):
+        """Check if group has space for more students"""
+        return self.get_current_size() < self.max_capacity
+    
+    def get_available_spaces(self):
+        """Get number of available spaces"""
+        return max(0, self.max_capacity - self.get_current_size())
+    
+    def is_at_preferred_size(self):
+        """Check if group is at preferred size"""
+        return self.get_current_size() == self.preferred_size
+    
+    def get_average_year_level(self):
+        """Calculate average year level of current members"""
+        if not self.members.exists():
+            return 0
+        
+        year_levels = [member.student.year_level for member in self.members.all()]
+        return sum(year_levels) / len(year_levels)
+    
+    def get_skill_level_distribution(self):
+        """Get distribution of skill levels in group"""
+        distribution = {'B': 0, 'I': 0, 'A': 0}
+        for member in self.members.all():
+            skill = member.student.skill_level
+            distribution[skill] = distribution.get(skill, 0) + 1
+        return distribution
+    
+    def is_compatible_with_student(self, student):
+        """Check if student would be compatible with this group"""
+        # Check skill level compatibility
+        if abs(ord(student.skill_level) - ord(self.target_skill_level)) > 1:
+            return False
+        
+        # Check year level compatibility (within 2 years)
+        avg_year = self.get_average_year_level()
+        if avg_year > 0 and abs(student.year_level - avg_year) > 2:
+            return False
+        
+        # Check if group has space
+        if not self.has_space():
+            return False
+        
+        return True
 
 class ScheduledUnavailability(models.Model):
     name = models.CharField(max_length=200, help_text="e.g., Year 4 Sports (Recurring)")
