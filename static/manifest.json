@@ -1,0 +1,29 @@
+{
+  "name": "Somerset Chess Scheduler",
+  "short_name": "Chess Scheduler",
+  "description": "Professional chess lesson scheduling and attendance management system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#212529",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192' width='192' height='192'><defs><style>.chess-piece { fill: %23000; }</style></defs><path class='chess-piece' d='M96 12c-6.6 0-12 5.4-12 12v12h-12v12h12v12c-13.2 0-24 10.8-24 24h12c0-6.6 5.4-12 12-12s12 5.4 12 12h12c0-13.2-10.8-24-24-24V48h12V36h-12V24c0-6.6-5.4-12-12-12z'/><rect class='chess-piece' x='72' y='84' width='48' height='72'/><rect class='chess-piece' x='60' y='156' width='72' height='24'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' width='512' height='512'><defs><style>.chess-piece { fill: %23000; }</style></defs><path class='chess-piece' d='M256 32c-17.6 0-32 14.4-32 32v32h-32v32h32v32c-35.2 0-64 28.8-64 64h32c0-17.6 14.4-32 32-32s32 14.4 32 32h32c0-35.2-28.8-64-64-64v-32h32v-32h-32V64c0-17.6-14.4-32-32-32z'/><rect class='chess-piece' x='192' y='224' width='128' height='192'/><rect class='chess-piece' x='160' y='416' width='192' height='64'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity", "utilities"],
+  "lang": "en",
+  "dir": "ltr",
+  "scope": "/",
+  "prefer_related_applications": false
+}

@@ -1,0 +1,555 @@
+{% extends 'scheduler/base.html' %}
+{% load static %}
+
+{% block title %}Analytics Dashboard - Somerset Chess Scheduler{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .analytics-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .metric-card {
+        text-align: center;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .metric-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin: 1rem 0;
+    }
+    .table-responsive {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .progress-bar-custom {
+        height: 20px;
+        border-radius: 10px;
+    }
+    .filter-section {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-chart-line"></i> Analytics Dashboard</h1>
+                <div class="text-muted">
+                    <i class="fas fa-calendar"></i> {{ current_term.name }}
+                </div>
+            </div>
+
+            {% if error %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> {{ error }}
+                </div>
+            {% else %}
+
+            <!-- Date Range Filter -->
+            <div class="filter-section">
+                <form method="GET" class="row align-items-end">
+                    <div class="col-md-3">
+                        <label for="start_date" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" 
+                               value="{{ start_date|date:'Y-m-d' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" 
+                               value="{{ end_date|date:'Y-m-d' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter"></i> Update Report
+                        </button>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <small class="text-muted">
+                            Showing data from {{ start_date|date:'M j, Y' }} to {{ end_date|date:'M j, Y' }}
+                        </small>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Student Progress Overview -->
+            <div class="analytics-card">
+                <h3><i class="fas fa-users"></i> Student Progress Overview</h3>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="metric-card bg-primary text-white">
+                            <div class="metric-value">{{ student_analytics.total_students }}</div>
+                            <div class="metric-label">Total Students</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card bg-danger text-white">
+                            <div class="metric-value">{{ student_analytics.students_behind }}</div>
+                            <div class="metric-label">Behind Schedule</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card bg-success text-white">
+                            <div class="metric-value">{{ student_analytics.students_on_track }}</div>
+                            <div class="metric-label">On Track</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card bg-info text-white">
+                            <div class="metric-value">{{ student_analytics.students_ahead }}</div>
+                            <div class="metric-label">Ahead of Schedule</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h5>Student Progress Distribution</h5>
+                        <div class="chart-container">
+                            <canvas id="studentProgressChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Skill Level Distribution</h5>
+                        <div class="chart-container">
+                            <canvas id="skillLevelChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Students Behind Schedule -->
+                <div class="mt-4">
+                    <h5>Students Most Behind Schedule</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Lessons Behind</th>
+                                    <th>Attended</th>
+                                    <th>Target</th>
+                                    <th>Progress</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for balance in student_analytics.lesson_balances|slice:":10" %}
+                                <tr>
+                                    <td>{{ balance.student.first_name }} {{ balance.student.last_name }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if balance.balance > 3 %}danger{% elif balance.balance > 1 %}warning{% else %}success{% endif %}">
+                                            {{ balance.balance }}
+                                        </span>
+                                    </td>
+                                    <td>{{ balance.attended }}</td>
+                                    <td>{{ balance.target }}</td>
+                                    <td>
+                                        {% if balance.target > 0 %}
+                                            {% widthratio balance.attended balance.target 100 as percentage %}
+                                            <div class="progress progress-bar-custom">
+                                                <div class="progress-bar bg-{% if percentage < 50 %}danger{% elif percentage < 80 %}warning{% else %}success{% endif %}" 
+                                                     style="width: {{ percentage }}%">
+                                                    {{ percentage }}%
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coach Performance Metrics -->
+            <div class="analytics-card">
+                <h3><i class="fas fa-chalkboard-teacher"></i> Coach Performance Metrics</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Coach</th>
+                                <th>Total Lessons</th>
+                                <th>Students</th>
+                                <th>Groups</th>
+                                <th>Attendance Rate</th>
+                                <th>Avg Group Size</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for coach_stat in coach_analytics %}
+                            <tr>
+                                <td>{{ coach_stat.coach.user.first_name }} {{ coach_stat.coach.user.last_name }}</td>
+                                <td>{{ coach_stat.total_lessons }}</td>
+                                <td>{{ coach_stat.total_students }}</td>
+                                <td>{{ coach_stat.total_groups }}</td>
+                                <td>
+                                    <span class="badge bg-{% if coach_stat.attendance_rate >= 90 %}success{% elif coach_stat.attendance_rate >= 80 %}warning{% else %}danger{% endif %}">
+                                        {{ coach_stat.attendance_rate }}%
+                                    </span>
+                                </td>
+                                <td>{{ coach_stat.avg_group_size }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- System Utilization -->
+            <div class="analytics-card">
+                <h3><i class="fas fa-clock"></i> System Utilization</h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Daily Utilization</h5>
+                        <div class="chart-container">
+                            <canvas id="dayUtilizationChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Time Slot Utilization</h5>
+                        <div class="chart-container">
+                            <canvas id="timeSlotChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h5>Group Type Distribution</h5>
+                        <div class="chart-container">
+                            <canvas id="groupTypeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Capacity Optimization</h5>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="metric-card bg-warning text-white">
+                                    <div class="metric-value">{{ utilization_analytics.capacity_stats.underutilized }}</div>
+                                    <div class="metric-label">Underutilized</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="metric-card bg-success text-white">
+                                    <div class="metric-value">{{ utilization_analytics.capacity_stats.optimal }}</div>
+                                    <div class="metric-label">Optimal</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="metric-card bg-danger text-white">
+                                    <div class="metric-value">{{ utilization_analytics.capacity_stats.full }}</div>
+                                    <div class="metric-label">Full</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="metric-card bg-info text-white">
+                                    <div class="metric-value">{{ utilization_analytics.capacity_stats.total }}</div>
+                                    <div class="metric-label">Total Groups</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Analytics -->
+            <div class="analytics-card">
+                <h3><i class="fas fa-chart-bar"></i> Attendance Analytics</h3>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="metric-card bg-success text-white">
+                            <div class="metric-value">{{ attendance_analytics.overall_attendance_rate }}%</div>
+                            <div class="metric-label">Overall Attendance Rate</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card bg-primary text-white">
+                            <div class="metric-value">{{ attendance_analytics.total_records }}</div>
+                            <div class="metric-label">Total Records</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card bg-info text-white">
+                            <div class="metric-value">{{ attendance_analytics.weekly_trends|length }}</div>
+                            <div class="metric-label">Weeks Analyzed</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h5>Attendance Status Breakdown</h5>
+                        <div class="chart-container">
+                            <canvas id="attendanceStatusChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Weekly Attendance Trends</h5>
+                        <div class="chart-container">
+                            <canvas id="weeklyTrendsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Absence Reasons -->
+                <div class="mt-4">
+                    <h5>Top Absence Reasons</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Reason</th>
+                                    <th>Count</th>
+                                    <th>Percentage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for reason in attendance_analytics.absence_reasons %}
+                                <tr>
+                                    <td>{{ reason.reason_for_absence|default:"Not Specified" }}</td>
+                                    <td>{{ reason.count }}</td>
+                                    <td>
+                                        {% if attendance_analytics.absence_reasons %}
+                                            {% widthratio reason.count attendance_analytics.total_records 100 %}%
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Chart Data as JSON -->
+{{ student_analytics|json_script:"student-data" }}
+{{ utilization_analytics|json_script:"utilization-data" }}
+{{ attendance_analytics|json_script:"attendance-data" }}
+
+<script>
+// Chart.js configurations
+document.addEventListener('DOMContentLoaded', function() {
+    // Get data from Django
+    const studentData = JSON.parse(document.getElementById('student-data').textContent);
+    const utilizationData = JSON.parse(document.getElementById('utilization-data').textContent);
+    const attendanceData = JSON.parse(document.getElementById('attendance-data').textContent);
+
+    // Student Progress Chart
+    const studentProgressCtx = document.getElementById('studentProgressChart').getContext('2d');
+    new Chart(studentProgressCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Behind Schedule', 'On Track', 'Ahead of Schedule'],
+            datasets: [{
+                data: [studentData.students_behind, studentData.students_on_track, studentData.students_ahead],
+                backgroundColor: ['#dc3545', '#28a745', '#17a2b8']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+
+    // Skill Level Chart
+    const skillLevelCtx = document.getElementById('skillLevelChart').getContext('2d');
+    const skillLabels = studentData.skill_distribution.map(item => item.skill_level);
+    const skillCounts = studentData.skill_distribution.map(item => item.count);
+    
+    new Chart(skillLevelCtx, {
+        type: 'bar',
+        data: {
+            labels: skillLabels,
+            datasets: [{
+                label: 'Students',
+                data: skillCounts,
+                backgroundColor: '#007bff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Day Utilization Chart
+    const dayUtilizationCtx = document.getElementById('dayUtilizationChart').getContext('2d');
+    const dayLabels = utilizationData.day_utilization.map(item => item.day);
+    const dayGroups = utilizationData.day_utilization.map(item => item.groups);
+    const dayLessons = utilizationData.day_utilization.map(item => item.lessons);
+    
+    new Chart(dayUtilizationCtx, {
+        type: 'bar',
+        data: {
+            labels: dayLabels,
+            datasets: [{
+                label: 'Groups',
+                data: dayGroups,
+                backgroundColor: '#28a745'
+            }, {
+                label: 'Lessons',
+                data: dayLessons,
+                backgroundColor: '#ffc107'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Time Slot Chart
+    const timeSlotCtx = document.getElementById('timeSlotChart').getContext('2d');
+    const timeLabels = utilizationData.time_slot_utilization.map(item => item.start_time);
+    const timeCounts = utilizationData.time_slot_utilization.map(item => item.group_count);
+    
+    new Chart(timeSlotCtx, {
+        type: 'line',
+        data: {
+            labels: timeLabels,
+            datasets: [{
+                label: 'Groups',
+                data: timeCounts,
+                borderColor: '#007bff',
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Group Type Chart
+    const groupTypeCtx = document.getElementById('groupTypeChart').getContext('2d');
+    const typeLabels = utilizationData.group_type_distribution.map(item => item.group_type);
+    const typeCounts = utilizationData.group_type_distribution.map(item => item.count);
+    
+    new Chart(groupTypeCtx, {
+        type: 'pie',
+        data: {
+            labels: typeLabels,
+            datasets: [{
+                data: typeCounts,
+                backgroundColor: ['#007bff', '#28a745', '#ffc107']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+
+    // Attendance Status Chart
+    const attendanceStatusCtx = document.getElementById('attendanceStatusChart').getContext('2d');
+    const statusLabels = attendanceData.attendance_breakdown.map(item => item.status);
+    const statusCounts = attendanceData.attendance_breakdown.map(item => item.count);
+    
+    new Chart(attendanceStatusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: statusLabels,
+            datasets: [{
+                data: statusCounts,
+                backgroundColor: ['#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+
+    // Weekly Trends Chart
+    const weeklyTrendsCtx = document.getElementById('weeklyTrendsChart').getContext('2d');
+    const weekLabels = attendanceData.weekly_trends.map(item => {
+        const date = new Date(item.week_start);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+    const weekRates = attendanceData.weekly_trends.map(item => item.attendance_rate);
+    
+    new Chart(weeklyTrendsCtx, {
+        type: 'line',
+        data: {
+            labels: weekLabels,
+            datasets: [{
+                label: 'Attendance Rate (%)',
+                data: weekRates,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

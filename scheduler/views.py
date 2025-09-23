@@ -16,6 +16,7 @@ from .models import (
 from .forms import LessonNoteForm
 from .slot_finder import find_better_slot, EnhancedSlotFinderEngine
 from django.http import JsonResponse
+from django.db.models import Avg, Max, Min
 import json
 
 def _prepare_lesson_context(lesson, editing_note_id=None):
@@ -880,3 +881,318 @@ def edit_lesson_note(request, pk):
     context['note_form'] = form # Add the form to the context
     
     return render(request, 'scheduler/_lesson_detail.html', context)
+
+
+# --- Advanced Analytics Dashboard ---
+
+@login_required
+def analytics_dashboard(request):
+    """Advanced analytics dashboard with comprehensive reporting"""
+    
+    # Check if user has permission (head coach or admin)
+    if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach) and not request.user.is_staff:
+        return redirect('dashboard')
+    
+    # Get current term
+    current_term = Term.get_active_term()
+    if not current_term:
+        return render(request, 'scheduler/analytics_dashboard.html', {
+            'error': 'No active term found. Please contact an administrator.'
+        })
+    
+    # Date range filtering
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    
+    if start_date:
+        try:
+            start_date = date.fromisoformat(start_date)
+        except ValueError:
+            start_date = current_term.start_date
+    else:
+        start_date = current_term.start_date
+    
+    if end_date:
+        try:
+            end_date = date.fromisoformat(end_date)
+        except ValueError:
+            end_date = current_term.end_date
+    else:
+        end_date = current_term.end_date
+    
+    # Student Progress Analytics
+    student_analytics = _get_student_analytics(current_term, start_date, end_date)
+    
+    # Coach Performance Metrics
+    coach_analytics = _get_coach_analytics(current_term, start_date, end_date)
+    
+    # System Utilization Insights
+    utilization_analytics = _get_utilization_analytics(current_term, start_date, end_date)
+    
+    # Attendance Pattern Analysis
+    attendance_analytics = _get_attendance_analytics(current_term, start_date, end_date)
+    
+    context = {
+        'current_term': current_term,
+        'start_date': start_date,
+        'end_date': end_date,
+        'student_analytics': student_analytics,
+        'coach_analytics': coach_analytics,
+        'utilization_analytics': utilization_analytics,
+        'attendance_analytics': attendance_analytics,
+    }
+    
+    return render(request, 'scheduler/analytics_dashboard.html', context)
+
+
+def _get_student_analytics(term, start_date, end_date):
+    """Calculate student progress analytics"""
+    
+    # Get all enrollments for the term
+    enrollments = Enrollment.objects.filter(term=term).select_related('student').annotate(
+        total_lessons=Count('attendancerecord', filter=Q(
+            attendancerecord__lesson_session__lesson_date__range=[start_date, end_date]
+        )),
+        attended_lessons=Count('attendancerecord', filter=Q(
+            attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT'],
+            attendancerecord__lesson_session__lesson_date__range=[start_date, end_date]
+        )),
+        absent_lessons=Count('attendancerecord', filter=Q(
+            attendancerecord__status='ABSENT',
+            attendancerecord__lesson_session__lesson_date__range=[start_date, end_date]
+        ))
+    )
+    
+    # Calculate lesson balance statistics
+    lesson_balances = []
+    students_behind = 0
+    students_on_track = 0
+    students_ahead = 0
+    
+    for enrollment in enrollments:
+        balance = enrollment.get_lesson_balance()
+        lesson_balances.append({
+            'student': enrollment.student,
+            'balance': balance,
+            'attended': enrollment.attended_lessons,
+            'total': enrollment.total_lessons,
+            'target': enrollment.adjusted_target
+        })
+        
+        if balance > 2:
+            students_behind += 1
+        elif balance < -1:
+            students_ahead += 1
+        else:
+            students_on_track += 1
+    
+    # Sort by balance (most behind first)
+    lesson_balances.sort(key=lambda x: x['balance'], reverse=True)
+    
+    # Skill level distribution
+    skill_distribution = Student.objects.filter(enrollment__term=term).values('skill_level').annotate(
+        count=Count('id')
+    ).order_by('skill_level')
+    
+    return {
+        'total_students': enrollments.count(),
+        'students_behind': students_behind,
+        'students_on_track': students_on_track,
+        'students_ahead': students_ahead,
+        'lesson_balances': lesson_balances[:20],  # Top 20 for display
+        'skill_distribution': list(skill_distribution),
+        'avg_attendance_rate': enrollments.aggregate(
+            avg_rate=Avg(F('attended_lessons') * 100.0 / F('total_lessons'))
+        )['avg_rate'] or 0
+    }
+
+
+def _get_coach_analytics(term, start_date, end_date):
+    """Calculate coach performance metrics"""
+    
+    coaches = Coach.objects.all().select_related('user').annotate(
+        total_lessons=Count('scheduledgroup__lessonsession', filter=Q(
+            scheduledgroup__term=term,
+            scheduledgroup__lessonsession__lesson_date__range=[start_date, end_date]
+        )),
+        total_students=Count('scheduledgroup__members', filter=Q(
+            scheduledgroup__term=term
+        ), distinct=True),
+        total_groups=Count('scheduledgroup', filter=Q(
+            scheduledgroup__term=term
+        ))
+    )
+    
+    coach_stats = []
+    for coach in coaches:
+        if coach.total_lessons > 0:
+            # Calculate attendance rates for this coach's lessons
+            attendance_records = AttendanceRecord.objects.filter(
+                lesson_session__scheduled_group__coach=coach,
+                lesson_session__scheduled_group__term=term,
+                lesson_session__lesson_date__range=[start_date, end_date]
+            )
+            
+            total_records = attendance_records.count()
+            attended_records = attendance_records.filter(
+                status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+            ).count()
+            
+            attendance_rate = (attended_records / total_records * 100) if total_records > 0 else 0
+            
+            # Calculate average group size
+            avg_group_size = coach.scheduledgroup_set.filter(term=term).aggregate(
+                avg_size=Avg('members__count')
+            )['avg_size'] or 0
+            
+            coach_stats.append({
+                'coach': coach,
+                'total_lessons': coach.total_lessons,
+                'total_students': coach.total_students,
+                'total_groups': coach.total_groups,
+                'attendance_rate': round(attendance_rate, 1),
+                'avg_group_size': round(avg_group_size, 1)
+            })
+    
+    # Sort by total lessons (most active first)
+    coach_stats.sort(key=lambda x: x['total_lessons'], reverse=True)
+    
+    return coach_stats
+
+
+def _get_utilization_analytics(term, start_date, end_date):
+    """Calculate system utilization insights"""
+    
+    # Time slot utilization
+    time_slots = TimeSlot.objects.all().annotate(
+        group_count=Count('scheduledgroup', filter=Q(
+            scheduledgroup__term=term
+        )),
+        lesson_count=Count('scheduledgroup__lessonsession', filter=Q(
+            scheduledgroup__term=term,
+            scheduledgroup__lessonsession__lesson_date__range=[start_date, end_date]
+        ))
+    ).order_by('start_time')
+    
+    # Day of week utilization
+    day_utilization = []
+    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    
+    for day_num, day_name in enumerate(days):
+        group_count = ScheduledGroup.objects.filter(
+            term=term,
+            day_of_week=day_num
+        ).count()
+        
+        lesson_count = LessonSession.objects.filter(
+            scheduled_group__term=term,
+            scheduled_group__day_of_week=day_num,
+            lesson_date__range=[start_date, end_date]
+        ).count()
+        
+        day_utilization.append({
+            'day': day_name,
+            'groups': group_count,
+            'lessons': lesson_count
+        })
+    
+    # Group type distribution
+    group_types = ScheduledGroup.objects.filter(term=term).values('group_type').annotate(
+        count=Count('id'),
+        avg_size=Avg('members__count')
+    ).order_by('group_type')
+    
+    # Capacity optimization
+    groups_with_capacity = ScheduledGroup.objects.filter(term=term).annotate(
+        current_size=Count('members')
+    )
+    
+    underutilized_groups = 0
+    optimal_groups = 0
+    full_groups = 0
+    
+    for group in groups_with_capacity:
+        max_capacity = group.get_type_based_max_capacity()
+        utilization_rate = (group.current_size / max_capacity) if max_capacity > 0 else 0
+        
+        if utilization_rate < 0.7:
+            underutilized_groups += 1
+        elif utilization_rate >= 1.0:
+            full_groups += 1
+        else:
+            optimal_groups += 1
+    
+    return {
+        'time_slot_utilization': list(time_slots),
+        'day_utilization': day_utilization,
+        'group_type_distribution': list(group_types),
+        'capacity_stats': {
+            'underutilized': underutilized_groups,
+            'optimal': optimal_groups,
+            'full': full_groups,
+            'total': groups_with_capacity.count()
+        }
+    }
+
+
+def _get_attendance_analytics(term, start_date, end_date):
+    """Calculate attendance pattern analysis"""
+    
+    # Overall attendance statistics
+    total_records = AttendanceRecord.objects.filter(
+        enrollment__term=term,
+        lesson_session__lesson_date__range=[start_date, end_date]
+    )
+    
+    attendance_stats = total_records.values('status').annotate(
+        count=Count('id')
+    ).order_by('status')
+    
+    # Absence reasons breakdown
+    absence_reasons = total_records.filter(status='ABSENT').values('reason_for_absence').annotate(
+        count=Count('id')
+    ).order_by('-count')
+    
+    # Weekly attendance trends (last 8 weeks)
+    weekly_trends = []
+    current_date = end_date
+    
+    for week in range(8):
+        week_start = current_date - timedelta(days=current_date.weekday() + (week * 7))
+        week_end = week_start + timedelta(days=6)
+        
+        if week_start < start_date:
+            break
+        
+        week_records = AttendanceRecord.objects.filter(
+            enrollment__term=term,
+            lesson_session__lesson_date__range=[week_start, week_end]
+        )
+        
+        total_week = week_records.count()
+        attended_week = week_records.filter(
+            status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+        ).count()
+        
+        attendance_rate = (attended_week / total_week * 100) if total_week > 0 else 0
+        
+        weekly_trends.append({
+            'week_start': week_start,
+            'week_end': week_end,
+            'attendance_rate': round(attendance_rate, 1),
+            'total_lessons': total_week
+        })
+    
+    weekly_trends.reverse()  # Show oldest to newest
+    
+    return {
+        'total_records': total_records.count(),
+        'attendance_breakdown': list(attendance_stats),
+        'absence_reasons': list(absence_reasons),
+        'weekly_trends': weekly_trends,
+        'overall_attendance_rate': round(
+            (total_records.filter(
+                status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+            ).count() / total_records.count() * 100) if total_records.count() > 0 else 0, 1
+        )
+    }

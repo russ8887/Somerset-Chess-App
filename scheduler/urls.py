@@ -10,6 +10,7 @@ urlpatterns = [
     path('student-report/<int:student_pk>/term/<int:term_pk>/', views.student_report_view, name='student-report'),
     path('availability/', views.manage_availability, name='manage-availability'),
     path('student/<int:student_pk>/availability/', views.manage_student_availability, name='manage-student-availability'),
+    path('analytics/', views.analytics_dashboard, name='analytics-dashboard'),
     
     # --- New Fill-in Management URL ---
     path('lesson/<int:lesson_pk>/manage/', views.manage_lesson_view, name='manage-lesson'),
