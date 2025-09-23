@@ -481,22 +481,39 @@ function findBetterSlot(studentId) {
 // Show slot recommendations modal with enhanced chain messaging
 function showSlotRecommendations(recommendations, studentName) {
     if (recommendations.length === 0) {
-        showInfo('No better slots found. Current placement appears optimal!');
+        showInfo('No alternative slots found at this time. Current placement appears optimal!');
         return;
+    }
+    
+    // Categorize recommendations
+    let improvements = recommendations.filter(r => r.placement_type !== 'alternative');
+    let alternatives = recommendations.filter(r => r.placement_type === 'alternative');
+    
+    // Determine modal title and message
+    let modalTitle, modalMessage, headerClass;
+    if (improvements.length > 0) {
+        modalTitle = 'Better Slots Found for ' + (studentName || 'this student') + '!';
+        modalMessage = `Found ${improvements.length} improved option(s)` + 
+                      (alternatives.length > 0 ? ` and ${alternatives.length} alternative option(s)` : '') + ':';
+        headerClass = 'bg-success';
+    } else {
+        modalTitle = 'Alternative Slots Available for ' + (studentName || 'this student');
+        modalMessage = `Found ${alternatives.length} alternative placement option(s) of similar quality:`;
+        headerClass = 'bg-info';
     }
     
     // Create modal content
     let modalContent = '<div class="modal fade" id="slotRecommendationsModal" tabindex="-1">' +
         '<div class="modal-dialog modal-lg">' +
         '<div class="modal-content">' +
-        '<div class="modal-header bg-success text-white">' +
+        '<div class="modal-header ' + headerClass + ' text-white">' +
         '<h5 class="modal-title">' +
-        '<i class="bi bi-search me-2"></i>Better Slots Found for ' + (studentName || 'this student') + '!' +
+        '<i class="bi bi-search me-2"></i>' + modalTitle +
         '</h5>' +
         '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
         '</div>' +
         '<div class="modal-body">' +
-        '<p class="mb-3">Found ' + recommendations.length + ' better slot option(s):</p>';
+        '<p class="mb-3">' + modalMessage + '</p>';
     
     recommendations.forEach((rec, index) => {
         const badgeClass = rec.placement_type === 'direct' ? 'bg-success' : 

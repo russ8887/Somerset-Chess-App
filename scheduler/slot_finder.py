@@ -560,10 +560,10 @@ class SlotFinderEngine:
         benefit_score = potential_score['total_score'] - current_score['total_score']
         best_alternative = max(existing_alternatives, key=lambda x: x.score)
         
-        # Only beneficial if new student fits better AND displaced student has good alternatives
+        # LOWERED THRESHOLD: Show more options including lateral moves
         beneficial = (
-            benefit_score > 20 and  # Significant improvement
-            best_alternative.score >= current_score['total_score'] - 10  # Displaced student not worse off
+            benefit_score >= -5 and  # Allow slight downgrades for variety
+            best_alternative.score >= current_score['total_score'] - 15  # More flexible for displaced student
         )
         
         return {
@@ -990,6 +990,7 @@ class EnhancedSlotFinderEngine(SlotFinderEngine):
     ) -> List[SlotRecommendation]:
         """
         Enhanced slot finding with complex swap chains and bulk optimization.
+        Always returns some options when possible, including alternative placements.
         """
         start_time = time.time()
         recommendations = []
@@ -1025,7 +1026,10 @@ class EnhancedSlotFinderEngine(SlotFinderEngine):
         recommendations.extend(direct_placements)
         
         if time.time() - start_time > max_time_seconds * 0.3:  # Use 30% of time for direct
-            return self._rank_recommendations(recommendations)[:max_results]
+            ranked = self._rank_recommendations(recommendations)[:max_results]
+            if len(ranked) < 3:  # If we have fewer than 3 options, try to find more
+                ranked.extend(self._find_alternative_placements(student, exclude_groups=[r.group for r in ranked]))
+            return ranked[:max_results]
         
         # Phase 2: Single swaps
         if include_swaps:
@@ -1033,7 +1037,10 @@ class EnhancedSlotFinderEngine(SlotFinderEngine):
             recommendations.extend(swap_options)
         
         if time.time() - start_time > max_time_seconds * 0.6:  # Use 60% of time for swaps
-            return self._rank_recommendations(recommendations)[:max_results]
+            ranked = self._rank_recommendations(recommendations)[:max_results]
+            if len(ranked) < 3:  # If we have fewer than 3 options, try to find more
+                ranked.extend(self._find_alternative_placements(student, exclude_groups=[r.group for r in ranked]))
+            return ranked[:max_results]
         
         # Phase 3: Complex swap chains
         if include_chains:
@@ -1059,7 +1066,75 @@ class EnhancedSlotFinderEngine(SlotFinderEngine):
                     )
                     recommendations.append(recommendation)
         
-        return self._rank_recommendations(recommendations)[:max_results]
+        # Final ranking with alternative options if needed
+        ranked = self._rank_recommendations(recommendations)[:max_results]
+        if len(ranked) < 3:  # If we have fewer than 3 options, try to find more
+            ranked.extend(self._find_alternative_placements(student, exclude_groups=[r.group for r in ranked]))
+        
+        return ranked[:max_results]
+    
+    def _find_alternative_placements(self, student: Student, exclude_groups: List[ScheduledGroup] = None) -> List[SlotRecommendation]:
+        """Find alternative placement options even if they're not better than current placement"""
+        if exclude_groups is None:
+            exclude_groups = []
+        
+        recommendations = []
+        current_term = Term.get_active_term()
+        
+        if not current_term:
+            return recommendations
+        
+        # Get student's enrollment type
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+            student_enrollment_type = enrollment.enrollment_type
+        except Enrollment.DoesNotExist:
+            return recommendations
+        
+        # Get student's available time slots
+        available_slots = self.availability_checker.get_available_slots(student)
+        
+        # Find ALL compatible groups, not just better ones
+        for day, time_slot in available_slots:
+            groups_at_time = ScheduledGroup.objects.filter(
+                term=current_term,
+                day_of_week=day,
+                time_slot=time_slot
+            ).select_related('coach').prefetch_related('members')
+            
+            for group in groups_at_time:
+                # Skip groups we've already recommended
+                if group in exclude_groups:
+                    continue
+                
+                # Only consider groups of compatible type
+                if not self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type):
+                    continue
+                
+                # Include groups with space OR groups where student could swap
+                if group.has_space() and group.is_compatible_with_student(student):
+                    # Calculate compatibility score
+                    score_info = self.compatibility_scorer.calculate_compatibility_score(
+                        student, group, group.coach
+                    )
+                    
+                    recommendation = SlotRecommendation(
+                        group=group,
+                        score=score_info['total_score'],
+                        placement_type='alternative',
+                        benefits={
+                            'score_breakdown': score_info['breakdown'],
+                            'percentage': score_info['percentage'],
+                            'available_spaces': group.get_available_spaces(),
+                            'current_size': group.get_current_size(),
+                            'enrollment_type': student_enrollment_type,
+                            'is_alternative': True
+                        }
+                    )
+                    recommendations.append(recommendation)
+        
+        # Return top alternatives
+        return sorted(recommendations, key=lambda x: x.score, reverse=True)[:5]
 
 
 # Utility functions for quick access
