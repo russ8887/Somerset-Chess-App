@@ -279,11 +279,11 @@ class ScheduledGroup(models.Model):
     )
     max_capacity = models.IntegerField(
         default=4,
-        help_text="Maximum number of students in this group"
+        help_text="Maximum number of students in this group (auto-calculated based on group type)"
     )
     preferred_size = models.IntegerField(
         default=3,
-        help_text="Preferred number of students in this group"
+        help_text="Preferred number of students in this group (auto-calculated based on group type)"
     )
     
     # Group type for matching preferences
@@ -293,6 +293,32 @@ class ScheduledGroup(models.Model):
         default='GROUP',
         help_text="Type of group (Solo, Pair, or Group)"
     )
+    
+    def save(self, *args, **kwargs):
+        """Auto-set capacity based on group type"""
+        if self.group_type == 'SOLO':
+            self.max_capacity = 1
+            self.preferred_size = 1
+        elif self.group_type == 'PAIR':
+            self.max_capacity = 2
+            self.preferred_size = 2
+        elif self.group_type == 'GROUP':
+            self.max_capacity = 3
+            self.preferred_size = 3
+        super().save(*args, **kwargs)
+    
+    def get_type_based_max_capacity(self):
+        """Get the correct max capacity based on group type"""
+        capacity_map = {
+            'SOLO': 1,
+            'PAIR': 2,
+            'GROUP': 3
+        }
+        return capacity_map.get(self.group_type, 3)
+    
+    def get_type_based_preferred_size(self):
+        """Get the correct preferred size based on group type"""
+        return self.get_type_based_max_capacity()  # Same as max for our use case
 
     def __str__(self):
         return self.name
@@ -303,11 +329,11 @@ class ScheduledGroup(models.Model):
     
     def has_space(self):
         """Check if group has space for more students"""
-        return self.get_current_size() < self.max_capacity
+        return self.get_current_size() < self.get_type_based_max_capacity()
     
     def get_available_spaces(self):
         """Get number of available spaces"""
-        return max(0, self.max_capacity - self.get_current_size())
+        return max(0, self.get_type_based_max_capacity() - self.get_current_size())
     
     def is_at_preferred_size(self):
         """Check if group is at preferred size"""
