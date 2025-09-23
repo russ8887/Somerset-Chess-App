@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
 from django.db.models import Exists, OuterRef, Count, Q, F
+from django.db import transaction
 from datetime import date, timedelta
 
 from .models import (
@@ -679,8 +680,7 @@ def execute_slot_move_api(request, student_id):
         except Enrollment.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Student not enrolled in current term'})
         
-        # For now, implement simple direct placement
-        # Complex swaps and chains will be implemented in the next phase
+        # Handle different placement types
         if placement_type == 'direct':
             # Check if group has space
             if not target_group.has_space():
@@ -699,12 +699,68 @@ def execute_slot_move_api(request, student_id):
                 'message': f'Successfully moved {student.first_name} to {target_group.name}',
                 'new_group': target_group.name
             })
-        else:
-            # For swaps and chains, return placeholder message
+            
+        elif placement_type == 'swap':
+            # Handle swap operations
+            displaced_student_id = data.get('displaced_student_id')
+            if not displaced_student_id:
+                return JsonResponse({'success': False, 'error': 'Displaced student ID required for swap'})
+            
+            try:
+                displaced_student = Student.objects.get(pk=displaced_student_id)
+                displaced_enrollment = displaced_student.enrollment_set.get(term=current_term)
+            except (Student.DoesNotExist, Enrollment.DoesNotExist):
+                return JsonResponse({'success': False, 'error': 'Displaced student or enrollment not found'})
+            
+            # Find current groups for both students
+            student_current_groups = list(ScheduledGroup.objects.filter(members=enrollment, term=current_term))
+            displaced_current_groups = list(ScheduledGroup.objects.filter(members=displaced_enrollment, term=current_term))
+            
+            # Validate the swap is possible
+            if target_group not in displaced_current_groups:
+                return JsonResponse({'success': False, 'error': 'Displaced student is not in the target group'})
+            
+            # Check if displaced student can fit in original student's groups
+            for group in student_current_groups:
+                if not group.is_compatible_with_student(displaced_student):
+                    return JsonResponse({
+                        'success': False, 
+                        'error': f'Displaced student is not compatible with group {group.name}'
+                    })
+            
+            # Execute the swap using atomic transaction
+            try:
+                with transaction.atomic():
+                    # Remove both students from their current groups
+                    for group in student_current_groups:
+                        group.members.remove(enrollment)
+                    
+                    for group in displaced_current_groups:
+                        group.members.remove(displaced_enrollment)
+                    
+                    # Add students to their new groups
+                    target_group.members.add(enrollment)
+                    for group in student_current_groups:
+                        group.members.add(displaced_enrollment)
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Successfully swapped {student.first_name} with {displaced_student.first_name}',
+                        'new_group': target_group.name,
+                        'displaced_student': f'{displaced_student.first_name} {displaced_student.last_name}'
+                    })
+                    
+            except Exception as e:
+                return JsonResponse({'success': False, 'error': f'Swap failed: {str(e)}'})
+                
+        elif placement_type == 'chain':
+            # For complex chains, return informative message about future implementation
             return JsonResponse({
                 'success': False, 
-                'error': 'Complex moves (swaps/chains) will be implemented in the next phase'
+                'error': 'Complex chain moves require advanced validation and will be implemented in the next phase. Please try a direct placement or simple swap instead.'
             })
+        else:
+            return JsonResponse({'success': False, 'error': f'Unknown placement type: {placement_type}'})
             
     except Exception as e:
         return JsonResponse({'success': False, 'error': f'Move failed: {str(e)}'})
