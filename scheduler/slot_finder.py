@@ -194,13 +194,26 @@ class CompatibilityScorer:
             return 0
     
     def _calculate_group_size_score(self, student: Student, group: ScheduledGroup) -> int:
-        """Calculate group size preference score"""
-        if student.preferred_group_size == group.group_type:
-            return 50
-        elif student.preferred_group_size == 'GROUP' and group.group_type in ['PAIR', 'GROUP']:
-            return 30  # Flexible preference
-        else:
-            return 10  # Not preferred but acceptable
+        """Calculate group size preference score based on student's enrollment type"""
+        # Get the student's current enrollment type from active term
+        current_term = Term.get_active_term()
+        if not current_term:
+            return 20  # Neutral score if no active term
+        
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+            student_enrollment_type = enrollment.enrollment_type
+            
+            if student_enrollment_type == group.group_type:
+                return 50  # Perfect match - student enrolled for this type
+            elif student_enrollment_type == 'GROUP' and group.group_type in ['PAIR', 'GROUP']:
+                return 30  # Flexible - group students can do pairs or groups
+            elif student_enrollment_type == 'PAIR' and group.group_type == 'GROUP':
+                return 25  # Acceptable - pair student in group setting
+            else:
+                return 10  # Not ideal but possible
+        except Enrollment.DoesNotExist:
+            return 20  # Neutral if no enrollment found
     
     def _calculate_coach_score(self, student: Student, coach: Coach) -> int:
         """Calculate coach specialization score"""

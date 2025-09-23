@@ -122,14 +122,6 @@ class Student(models.Model):
         default=SkillLevel.BEGINNER,
         help_text="Chess skill level: Beginner, Intermediate, or Advanced"
     )
-    
-    # Student preferences for slot finder
-    preferred_group_size = models.CharField(
-        max_length=5,
-        choices=[('SOLO', 'Solo'), ('PAIR', 'Pair'), ('GROUP', 'Group')],
-        default='GROUP',
-        help_text="Preferred lesson group size"
-    )
 
     def __str__(self):
         # Safely gets the school class name if it exists.
