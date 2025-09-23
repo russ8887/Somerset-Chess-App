@@ -539,62 +539,113 @@ def create_note_view(request, record_pk):
 
 @login_required
 def find_better_slot_api(request, student_id):
-    """API endpoint for finding better slots for a student"""
+    """API endpoint for finding better slots for a student with enhanced error handling"""
+    import logging
+    import time as time_module
+    
+    logger = logging.getLogger(__name__)
+    
     if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'success': False, 'error': 'Invalid request'})
     
+    start_time = time_module.time()
+    
     try:
         student = get_object_or_404(Student, pk=student_id)
+        logger.info(f"Starting slot finder analysis for student {student.id} ({student.first_name} {student.last_name})")
+        
+        # Check if there's an active term
+        current_term = Term.get_active_term()
+        if not current_term:
+            return JsonResponse({
+                'success': False, 
+                'error': 'No active term found. Please contact an administrator.'
+            })
+        
+        # Check if student is enrolled in current term
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+        except Enrollment.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'{student.first_name} is not enrolled in the current term ({current_term.name}). Please contact an administrator.'
+            })
         
         # Use the slot finder engine with generous timeout for full analysis
         engine = EnhancedSlotFinderEngine()
-        recommendations = engine.find_optimal_slots(
-            student, 
-            max_results=5,
-            include_chains=True,
-            max_time_seconds=600  # 10 minutes for comprehensive analysis
-        )
+        
+        try:
+            recommendations = engine.find_optimal_slots(
+                student, 
+                max_results=5,
+                include_chains=True,
+                max_time_seconds=600  # 10 minutes for comprehensive analysis
+            )
+        except Exception as e:
+            logger.error(f"Slot finder engine error for student {student_id}: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Analysis engine encountered an error. The system is working on optimizing your schedule - please try again in a moment.'
+            })
+        
+        analysis_time = time_module.time() - start_time
+        logger.info(f"Slot finder analysis completed for student {student_id} in {analysis_time:.2f} seconds. Found {len(recommendations)} recommendations.")
         
         # Convert recommendations to JSON-serializable format
         recommendations_data = []
         for rec in recommendations:
-            # Get day name
-            day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-            day_name = day_names[rec.group.day_of_week] if rec.group.day_of_week < len(day_names) else 'Unknown'
-            
-            rec_data = {
-                'group_name': rec.group.name,
-                'group_id': rec.group.id,
-                'score': rec.score,
-                'percentage': rec.benefits.get('percentage', 0),
-                'placement_type': rec.placement_type,
-                'day_name': day_name,
-                'time_slot': str(rec.group.time_slot),
-                'coach_name': str(rec.group.coach) if rec.group.coach else 'No Coach',
-                'current_size': rec.group.get_current_size(),
-                'max_capacity': rec.group.max_capacity,
-            }
-            
-            # Add placement-specific data
-            if rec.placement_type == 'swap' and rec.swap_chain:
-                swap_info = rec.swap_chain[0] if rec.swap_chain else {}
-                rec_data['displaced_student'] = str(swap_info.get('student_out', 'Unknown'))
-            elif rec.placement_type == 'chain' and hasattr(rec.swap_chain, 'get_chain_length'):
-                rec_data['chain_length'] = rec.swap_chain.get_chain_length()
-            
-            recommendations_data.append(rec_data)
+            try:
+                # Get day name
+                day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+                day_name = day_names[rec.group.day_of_week] if rec.group.day_of_week < len(day_names) else 'Unknown'
+                
+                rec_data = {
+                    'group_name': rec.group.name,
+                    'group_id': rec.group.id,
+                    'score': rec.score,
+                    'percentage': rec.benefits.get('percentage', 0),
+                    'placement_type': rec.placement_type,
+                    'day_name': day_name,
+                    'time_slot': str(rec.group.time_slot),
+                    'coach_name': str(rec.group.coach) if rec.group.coach else 'No Coach',
+                    'current_size': rec.group.get_current_size(),
+                    'max_capacity': rec.group.max_capacity,
+                }
+                
+                # Add placement-specific data
+                if rec.placement_type == 'swap' and rec.swap_chain:
+                    swap_info = rec.swap_chain[0] if rec.swap_chain else {}
+                    rec_data['displaced_student'] = str(swap_info.get('student_out', 'Unknown'))
+                elif rec.placement_type == 'chain' and hasattr(rec.swap_chain, 'get_chain_length'):
+                    rec_data['chain_length'] = rec.swap_chain.get_chain_length()
+                
+                recommendations_data.append(rec_data)
+            except Exception as e:
+                logger.warning(f"Error processing recommendation for student {student_id}: {str(e)}")
+                continue  # Skip this recommendation but continue with others
+        
+        # Provide helpful message based on results
+        if not recommendations_data:
+            message = f"No better slots found for {student.first_name}. Current placement appears optimal!"
+        else:
+            message = f"Found {len(recommendations_data)} better slot option(s) for {student.first_name}"
         
         return JsonResponse({
             'success': True,
             'recommendations': recommendations_data,
             'student_name': f"{student.first_name} {student.last_name}",
-            'analysis_time': '30 seconds'  # Could be actual time if tracked
+            'analysis_time': f"{analysis_time:.1f} seconds",
+            'message': message
         })
         
     except Student.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Student not found'})
     except Exception as e:
-        return JsonResponse({'success': False, 'error': f'Analysis failed: {str(e)}'})
+        logger.error(f"Unexpected error in find_better_slot_api for student {student_id}: {str(e)}")
+        return JsonResponse({
+            'success': False, 
+            'error': 'An unexpected error occurred during analysis. Please try again or contact support if the problem persists.'
+        })
 
 
 @login_required

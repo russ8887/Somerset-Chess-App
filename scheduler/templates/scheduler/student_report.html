@@ -411,16 +411,28 @@
         }
     }
     
-    // Find better slot functionality
+    // Find better slot functionality with enhanced progress tracking
     function findBetterSlot(studentId) {
         // Show loading state
         const button = event.target;
         const originalText = button.innerHTML;
-        button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Deep Analysis Running... (up to 10 minutes)';
+        button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Analyzing... Please wait';
         button.disabled = true;
         
-        // Show additional progress message
-        showNotification('Starting comprehensive slot analysis. This may take up to 10 minutes for the best results.', 'info');
+        // Show progress notification with timeout warning
+        const progressNotification = showNotification(
+            'Starting intelligent slot analysis. This comprehensive analysis may take several minutes for the best results. Please be patient...', 
+            'info', 
+            false // Don't auto-dismiss
+        );
+        
+        // Start progress animation
+        let progressDots = 0;
+        const progressInterval = setInterval(() => {
+            progressDots = (progressDots + 1) % 4;
+            const dots = '.'.repeat(progressDots);
+            button.innerHTML = `<i class="bi bi-hourglass-split me-1"></i>Analyzing${dots} Please wait`;
+        }, 500);
         
         // Make AJAX request to find better slots
         fetch(`/api/find-better-slot/${studentId}/`, {
@@ -432,21 +444,55 @@
         })
         .then(response => response.json())
         .then(data => {
+            // Clear progress animation
+            clearInterval(progressInterval);
+            
             // Restore button
             button.innerHTML = originalText;
             button.disabled = false;
             
+            // Remove progress notification
+            if (progressNotification && progressNotification.parentNode) {
+                progressNotification.remove();
+            }
+            
             if (data.success) {
-                showSlotRecommendations(data.recommendations);
+                // Show success message with timing
+                showNotification(
+                    `${data.message || 'Analysis complete!'} (Completed in ${data.analysis_time || 'unknown time'})`, 
+                    'success'
+                );
+                
+                if (data.recommendations && data.recommendations.length > 0) {
+                    showSlotRecommendations(data.recommendations, data.student_name);
+                } else {
+                    showInfo(`No better slots found for ${data.student_name || 'this student'}. Current placement appears optimal!`);
+                }
             } else {
                 showError(data.error || 'Failed to find better slots');
             }
         })
         .catch(error => {
+            // Clear progress animation
+            clearInterval(progressInterval);
+            
             // Restore button
             button.innerHTML = originalText;
             button.disabled = false;
-            showError('Network error: ' + error.message);
+            
+            // Remove progress notification
+            if (progressNotification && progressNotification.parentNode) {
+                progressNotification.remove();
+            }
+            
+            // Show user-friendly error message
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                showError('Connection error. Please check your internet connection and try again.');
+            } else {
+                showError('Analysis failed due to a technical issue. Please try again in a moment.');
+            }
+            
+            console.error('Slot finder error:', error);
         });
     }
     
@@ -561,7 +607,7 @@
         showNotification(message, 'info');
     }
     
-    function showNotification(message, type) {
+    function showNotification(message, type, autoDismiss = true) {
         const alertDiv = document.createElement('div');
         alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
         alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
@@ -572,12 +618,16 @@
         
         document.body.appendChild(alertDiv);
         
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (alertDiv.parentNode) {
-                alertDiv.remove();
-            }
-        }, 5000);
+        // Auto-remove after 5 seconds (unless disabled)
+        if (autoDismiss) {
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+        
+        return alertDiv; // Return element for manual cleanup
     }
     
     console.log('Student report page loaded');

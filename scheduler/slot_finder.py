@@ -130,6 +130,60 @@ class CompatibilityScorer:
     
     def __init__(self):
         self._group_cache = {}
+        self._lesson_balance_cache = {}
+        self._enrollment_cache = {}
+        self._cache_timeout = 300  # 5 minutes
+        self._last_cache_clear = time.time()
+    
+    def _clear_cache_if_needed(self):
+        """Clear cache if it's too old"""
+        if time.time() - self._last_cache_clear > self._cache_timeout:
+            self._lesson_balance_cache.clear()
+            self._enrollment_cache.clear()
+            self._group_cache.clear()
+            self._last_cache_clear = time.time()
+    
+    def _bulk_prefetch_lesson_balances(self, students: List[Student], current_term: Term):
+        """Bulk prefetch lesson balances for multiple students to avoid N+1 queries"""
+        self._clear_cache_if_needed()
+        
+        # Get student IDs that aren't already cached
+        student_ids_to_fetch = [
+            s.id for s in students 
+            if f"{s.id}_{current_term.id}" not in self._lesson_balance_cache
+        ]
+        
+        if not student_ids_to_fetch:
+            return  # All already cached
+        
+        # Bulk fetch enrollments with attendance counts
+        enrollments_with_counts = Enrollment.objects.filter(
+            student_id__in=student_ids_to_fetch,
+            term=current_term
+        ).annotate(
+            actual_lessons_count=Count(
+                'attendancerecord',
+                filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT'])
+            )
+        ).select_related('student')
+        
+        # Cache the results
+        for enrollment in enrollments_with_counts:
+            cache_key = f"{enrollment.student.id}_{current_term.id}"
+            # Calculate balance: target + carried forward - actual lessons
+            balance = enrollment.adjusted_target - enrollment.actual_lessons_count
+            self._lesson_balance_cache[cache_key] = balance
+            self._enrollment_cache[cache_key] = enrollment
+    
+    def _get_cached_lesson_balance(self, student: Student, current_term: Term) -> int:
+        """Get cached lesson balance for a student"""
+        cache_key = f"{student.id}_{current_term.id}"
+        return self._lesson_balance_cache.get(cache_key, 0)
+    
+    def _get_cached_enrollment(self, student: Student, current_term: Term):
+        """Get cached enrollment for a student"""
+        cache_key = f"{student.id}_{current_term.id}"
+        return self._enrollment_cache.get(cache_key)
     
     def calculate_compatibility_score(
         self, 
@@ -243,12 +297,25 @@ class CompatibilityScorer:
             return 20  # Coach can still teach, but not specialized
     
     def _calculate_lesson_balance_score(self, student: Student) -> int:
-        """Calculate lesson balance priority score"""
+        """Calculate lesson balance priority score using cached values"""
         # Get current term enrollment
         current_term = Term.get_active_term()
         if not current_term:
             return 20
         
+        # Try to get cached balance first
+        balance = self._get_cached_lesson_balance(student, current_term)
+        if balance is not None:
+            if balance > 3:
+                return 40  # High priority - student owes many lessons
+            elif balance > 1:
+                return 30  # Medium priority
+            elif balance >= 0:
+                return 20  # Normal priority
+            else:
+                return 10  # Low priority - student has credit
+        
+        # Fallback to direct query if not cached
         try:
             enrollment = student.enrollment_set.get(term=current_term)
             balance = enrollment.get_lesson_balance()
@@ -816,10 +883,36 @@ class EnhancedSlotFinderEngine(SlotFinderEngine):
         max_time_seconds: int = 60
     ) -> List[SlotRecommendation]:
         """
-        Enhanced slot finding with complex swap chains.
+        Enhanced slot finding with complex swap chains and bulk optimization.
         """
         start_time = time.time()
         recommendations = []
+        current_term = Term.get_active_term()
+        
+        if not current_term:
+            return recommendations
+        
+        # Bulk prefetch lesson balances for performance optimization
+        # Get all students that might be involved in analysis
+        all_students_to_analyze = [student]
+        
+        # Get students from groups at available time slots for swap analysis
+        if include_swaps or include_chains:
+            available_slots = self.availability_checker.get_available_slots(student)
+            for day, time_slot in available_slots:
+                groups_at_time = ScheduledGroup.objects.filter(
+                    term=current_term,
+                    day_of_week=day,
+                    time_slot=time_slot
+                ).prefetch_related('members__student')
+                
+                for group in groups_at_time:
+                    for member in group.members.all():
+                        if member.student not in all_students_to_analyze:
+                            all_students_to_analyze.append(member.student)
+        
+        # Bulk prefetch lesson balances for all students we'll analyze
+        self.compatibility_scorer._bulk_prefetch_lesson_balances(all_students_to_analyze, current_term)
         
         # Phase 1: Direct placements (quick wins)
         direct_placements = self._find_direct_placements(student)
