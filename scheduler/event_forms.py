@@ -90,11 +90,13 @@ class CampEventForm(forms.ModelForm):
     
     year_levels = forms.MultipleChoiceField(
         choices=[
+            ('P', 'Prep'),
+            ('1', 'Year 1'),
+            ('2', 'Year 2'),
             ('3', 'Year 3'),
             ('4', 'Year 4'),
             ('5', 'Year 5'),
             ('6', 'Year 6'),
-            ('7', 'Year 7'),
         ],
         widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
         label='Year Levels Affected'
@@ -258,7 +260,7 @@ class IndividualStudentEventForm(forms.ModelForm):
     )
     
     year_level_filter = forms.ChoiceField(
-        choices=[('', 'All Years')] + [(str(i), f'Year {i}') for i in range(3, 8)],
+        choices=[('', 'All Years')] + [('P', 'Prep')] + [(str(i), f'Year {i}') for i in range(1, 7)],
         required=False,
         widget=forms.Select(attrs={'class': 'form-control'}),
         label='Filter by Year Level'
@@ -296,10 +298,18 @@ class IndividualStudentEventForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Make the students field dynamic based on filters
         if 'year_level_filter' in self.data and self.data['year_level_filter']:
-            year_level = int(self.data['year_level_filter'])
-            self.fields['students'].queryset = Student.objects.filter(
-                year_level=year_level
-            ).order_by('last_name', 'first_name')
+            year_level_filter = self.data['year_level_filter']
+            if year_level_filter == 'P':
+                # Handle Prep level
+                self.fields['students'].queryset = Student.objects.filter(
+                    year_level='P'
+                ).order_by('last_name', 'first_name')
+            else:
+                # Handle numeric year levels
+                year_level = int(year_level_filter)
+                self.fields['students'].queryset = Student.objects.filter(
+                    year_level=year_level
+                ).order_by('last_name', 'first_name')
     
     def clean(self):
         cleaned_data = super().clean()

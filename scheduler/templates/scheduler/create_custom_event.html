@@ -1,0 +1,314 @@
+{% extends "scheduler/base.html" %}
+{% load static %}
+
+{% block title %}Create Custom Event - Somerset Chess Scheduler{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-left: 4px solid #6c757d;
+    }
+    
+    .form-section h5 {
+        color: #495057;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    
+    .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    
+    .form-check {
+        background: white;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid #dee2e6;
+    }
+    
+    .form-check:hover {
+        background: #f8f9fa;
+    }
+    
+    .preview-section {
+        background: #e3f2fd;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-top: 1rem;
+        border-left: 4px solid #2196f3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-cog text-secondary"></i>
+                        Create Custom Event
+                    </h1>
+                    <p class="text-muted mb-0">{{ description }}</p>
+                </div>
+                <div>
+                    <a href="{% url 'event-management-dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Events
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form -->
+    <div class="row">
+        <div class="col-lg-8">
+            <form method="post" id="custom-event-form">
+                {% csrf_token %}
+                
+                <!-- Basic Information -->
+                <div class="form-section">
+                    <h5><i class="fas fa-info-circle"></i> Basic Information</h5>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.name.id_for_label }}" class="form-label">{{ form.name.label }}</label>
+                                {{ form.name }}
+                                {% if form.name.errors %}
+                                    <div class="text-danger small">{{ form.name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.event_type.id_for_label }}" class="form-label">{{ form.event_type.label }}</label>
+                                {{ form.event_type }}
+                                {% if form.event_type.errors %}
+                                    <div class="text-danger small">{{ form.event_type.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="{{ form.reason.id_for_label }}" class="form-label">{{ form.reason.label }}</label>
+                        {{ form.reason }}
+                        {% if form.reason.errors %}
+                            <div class="text-danger small">{{ form.reason.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Date Range -->
+                <div class="form-section">
+                    <h5><i class="fas fa-calendar"></i> Date Range</h5>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.event_date.id_for_label }}" class="form-label">{{ form.event_date.label }}</label>
+                                {{ form.event_date }}
+                                {% if form.event_date.errors %}
+                                    <div class="text-danger small">{{ form.event_date.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label for="{{ form.end_date.id_for_label }}" class="form-label">{{ form.end_date.label }}</label>
+                                {{ form.end_date }}
+                                <div class="help-text">Leave blank for single-day event</div>
+                                {% if form.end_date.errors %}
+                                    <div class="text-danger small">{{ form.end_date.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Time Slots -->
+                <div class="form-section">
+                    <h5><i class="fas fa-clock"></i> Time Slots</h5>
+                    <p class="text-muted small">Select specific time slots, or leave blank for all-day event</p>
+                    
+                    <div class="checkbox-grid">
+                        {% for choice in form.time_slots %}
+                            <div class="form-check">
+                                {{ choice.tag }}
+                                <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                    {{ choice.choice_label }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if form.time_slots.errors %}
+                        <div class="text-danger small mt-2">{{ form.time_slots.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Year Levels -->
+                <div class="form-section">
+                    <h5><i class="fas fa-graduation-cap"></i> Year Levels</h5>
+                    <div class="form-group mb-3">
+                        <label for="{{ form.year_levels.id_for_label }}" class="form-label">{{ form.year_levels.label }}</label>
+                        {{ form.year_levels }}
+                        <div class="help-text">{{ form.year_levels.help_text }}</div>
+                        {% if form.year_levels.errors %}
+                            <div class="text-danger small">{{ form.year_levels.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- School Classes -->
+                <div class="form-section">
+                    <h5><i class="fas fa-users"></i> School Classes</h5>
+                    <p class="text-muted small">Select specific classes to affect</p>
+                    
+                    <div class="checkbox-grid">
+                        {% for choice in form.school_classes %}
+                            <div class="form-check">
+                                {{ choice.tag }}
+                                <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                    {{ choice.choice_label }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if form.school_classes.errors %}
+                        <div class="text-danger small mt-2">{{ form.school_classes.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Individual Students -->
+                <div class="form-section">
+                    <h5><i class="fas fa-user"></i> Individual Students</h5>
+                    <p class="text-muted small">Select specific students to affect</p>
+                    
+                    <div class="checkbox-grid" style="max-height: 300px; overflow-y: auto;">
+                        {% for choice in form.students %}
+                            <div class="form-check">
+                                {{ choice.tag }}
+                                <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                    {{ choice.choice_label }}
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% if form.students.errors %}
+                        <div class="text-danger small mt-2">{{ form.students.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Form Errors -->
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <!-- Submit Buttons -->
+                <div class="d-flex justify-content-between">
+                    <a href="{% url 'event-management-dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Create Custom Event
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle text-primary"></i>
+                        Custom Event Help
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <h6>Event Types:</h6>
+                    <ul class="small">
+                        <li><strong>Public Holiday:</strong> Affects all students</li>
+                        <li><strong>Pupil Free Day:</strong> Staff development day</li>
+                        <li><strong>Camp:</strong> Multi-day school camp</li>
+                        <li><strong>Excursion:</strong> Class field trip</li>
+                        <li><strong>Individual:</strong> Specific students only</li>
+                        <li><strong>Custom:</strong> Flexible configuration</li>
+                    </ul>
+                    
+                    <h6 class="mt-3">Selection Priority:</h6>
+                    <p class="small text-muted">
+                        If you select both year levels AND specific classes AND individual students, 
+                        all selected groups will be affected by the event.
+                    </p>
+                    
+                    <h6 class="mt-3">Time Slots:</h6>
+                    <p class="small text-muted">
+                        Leave time slots blank to create an all-day event. Select specific slots 
+                        to affect only those time periods.
+                    </p>
+                </div>
+            </div>
+
+            <div class="preview-section mt-3">
+                <h6><i class="fas fa-eye"></i> Preview</h6>
+                <p class="small">{{ preview_info }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add some basic form validation feedback
+    const form = document.getElementById('custom-event-form');
+    const nameField = document.getElementById('{{ form.name.id_for_label }}');
+    const eventDateField = document.getElementById('{{ form.event_date.id_for_label }}');
+    
+    // Real-time validation feedback
+    if (nameField) {
+        nameField.addEventListener('input', function() {
+            if (this.value.trim().length > 0) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+            }
+        });
+    }
+    
+    if (eventDateField) {
+        eventDateField.addEventListener('change', function() {
+            if (this.value) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } else {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
