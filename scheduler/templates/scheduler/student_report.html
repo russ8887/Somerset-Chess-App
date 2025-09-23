@@ -31,22 +31,7 @@
                 </h4>
             </div>
             <div class="card-body">
-                {% if error %}
-                    <div class="alert alert-danger">
-                        <strong>Error:</strong> {{ error }}
-                    </div>
-                {% endif %}
-
-                {% if debug_info %}
-                    <div class="alert alert-info">
-                        <strong>Debug Info:</strong><br>
-                        Student PK: {{ debug_info.student_pk }}<br>
-                        Term PK: {{ debug_info.term_pk }}<br>
-                        Records Count: {{ debug_info.records_count }}<br>
-                        Request Path: {{ debug_info.request_path }}<br>
-                        Is HTMX: {{ debug_info.is_htmx }}
-                    </div>
-                {% endif %}
+                {# Remove error and debug_info blocks as these variables aren't passed from the view #}
 
                 {% if student and term %}
                     <!-- Student Information -->
@@ -344,8 +329,9 @@
                                                             <span class="badge bg-light text-dark">{{ record.get_reason_for_absence_display }}</span>
                                                         </div>
                                                     {% endif %}
-                                                    {% with note=record.lessonnote|default:None %}
-                                                        {% if note %}
+                                                    {# Safely check for lesson notes without causing RelatedObjectDoesNotExist #}
+                                                    {% if record.lesson_session.lessonnote_set.exists %}
+                                                        {% for note in record.lesson_session.lessonnote_set.all %}
                                                             {% if note.topics_covered %}
                                                                 <div class="mb-1">
                                                                     <strong class="text-info">Topics:</strong> 
@@ -358,9 +344,9 @@
                                                                     <span class="text-muted">{{ note.coach_comments }}</span>
                                                                 </div>
                                                             {% endif %}
-                                                        {% endif %}
-                                                    {% endwith %}
-                                                    {% if not record.reason_for_absence and not note %}
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                    {% if not record.reason_for_absence and not record.lesson_session.lessonnote_set.exists %}
                                                         <span class="text-muted fst-italic">No additional details</span>
                                                     {% endif %}
                                                 </td>
