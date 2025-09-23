@@ -458,74 +458,68 @@
         }
         
         // Create modal content
-        let modalContent = `
-            <div class="modal fade" id="slotRecommendationsModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header bg-success text-white">
-                            <h5 class="modal-title">
-                                <i class="bi bi-search me-2"></i>Better Slots Found!
-                            </h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="mb-3">Found ${recommendations.length} better slot option(s):</p>
-        `;
+        let modalContent = '<div class="modal fade" id="slotRecommendationsModal" tabindex="-1">' +
+            '<div class="modal-dialog modal-lg">' +
+            '<div class="modal-content">' +
+            '<div class="modal-header bg-success text-white">' +
+            '<h5 class="modal-title">' +
+            '<i class="bi bi-search me-2"></i>Better Slots Found!' +
+            '</h5>' +
+            '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>' +
+            '</div>' +
+            '<div class="modal-body">' +
+            '<p class="mb-3">Found ' + recommendations.length + ' better slot option(s):</p>';
         
         recommendations.forEach((rec, index) => {
             const badgeClass = rec.placement_type === 'direct' ? 'bg-success' : 
                               rec.placement_type === 'swap' ? 'bg-warning' : 'bg-info';
             
-            modalContent += `
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div>
-                            <strong>${rec.group_name}</strong>
-                            <span class="badge ${badgeClass} ms-2">${rec.placement_type.toUpperCase()}</span>
-                        </div>
-                        <div class="text-end">
-                            <div class="h5 mb-0 text-success">${rec.score}/370</div>
-                            <small class="text-muted">${rec.percentage}% match</small>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p class="mb-1"><strong>Time:</strong> ${rec.day_name} ${rec.time_slot}</p>
-                                <p class="mb-1"><strong>Coach:</strong> ${rec.coach_name}</p>
-                                <p class="mb-1"><strong>Current Size:</strong> ${rec.current_size}/${rec.max_capacity}</p>
-                            </div>
-                            <div class="col-md-6">
-                                ${rec.placement_type === 'swap' ? 
-                                    `<p class="mb-1"><strong>Requires:</strong> Swap with ${rec.displaced_student}</p>` : 
-                                    ''}
-                                ${rec.placement_type === 'chain' ? 
-                                    `<p class="mb-1"><strong>Chain Length:</strong> ${rec.chain_length} moves</p>` : 
-                                    ''}
-                            </div>
-                        </div>
-                        <div class="mt-2">
-                            <button class="btn btn-primary btn-sm" onclick="executeRecommendation(${index})">
-                                <i class="bi bi-check-circle me-1"></i>Move to This Slot
-                            </button>
-                            <button class="btn btn-outline-info btn-sm" onclick="showRecommendationDetails(${index})">
-                                <i class="bi bi-info-circle me-1"></i>View Details
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
+            modalContent += '<div class="card mb-3">' +
+                '<div class="card-header d-flex justify-content-between align-items-center">' +
+                '<div>' +
+                '<strong>' + rec.group_name + '</strong>' +
+                '<span class="badge ' + badgeClass + ' ms-2">' + rec.placement_type.toUpperCase() + '</span>' +
+                '</div>' +
+                '<div class="text-end">' +
+                '<div class="h5 mb-0 text-success">' + rec.score + '/370</div>' +
+                '<small class="text-muted">' + rec.percentage + '% match</small>' +
+                '</div>' +
+                '</div>' +
+                '<div class="card-body">' +
+                '<div class="row">' +
+                '<div class="col-md-6">' +
+                '<p class="mb-1"><strong>Time:</strong> ' + rec.day_name + ' ' + rec.time_slot + '</p>' +
+                '<p class="mb-1"><strong>Coach:</strong> ' + rec.coach_name + '</p>' +
+                '<p class="mb-1"><strong>Current Size:</strong> ' + rec.current_size + '/' + rec.max_capacity + '</p>' +
+                '</div>' +
+                '<div class="col-md-6">' +
+                (rec.placement_type === 'swap' ? 
+                    '<p class="mb-1"><strong>Requires:</strong> Swap with ' + rec.displaced_student + '</p>' : 
+                    '') +
+                (rec.placement_type === 'chain' ? 
+                    '<p class="mb-1"><strong>Chain Length:</strong> ' + rec.chain_length + ' moves</p>' : 
+                    '') +
+                '</div>' +
+                '</div>' +
+                '<div class="mt-2">' +
+                '<button class="btn btn-primary btn-sm" onclick="executeRecommendation(' + index + ')">' +
+                '<i class="bi bi-check-circle me-1"></i>Move to This Slot' +
+                '</button>' +
+                '<button class="btn btn-outline-info btn-sm" onclick="showRecommendationDetails(' + index + ')">' +
+                '<i class="bi bi-info-circle me-1"></i>View Details' +
+                '</button>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
         });
         
-        modalContent += `
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
+        modalContent += '</div>' +
+            '<div class="modal-footer">' +
+            '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>' +
+            '</div>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
         
         // Remove existing modal if any
         const existingModal = document.getElementById('slotRecommendationsModal');
