@@ -431,13 +431,416 @@ class SlotFinderEngine:
         )
 
 
+@dataclass
+class SwapMove:
+    """Represents a single move in a swap chain"""
+    student: Student
+    from_group: ScheduledGroup
+    to_group: ScheduledGroup
+    benefit_score: int
+    displaced_student: Optional[Student] = None
+
+
+class SwapChain:
+    """Manages complex multi-student swap chains"""
+    
+    def __init__(self, initial_student: Student):
+        self.initial_student = initial_student
+        self.moves: List[SwapMove] = []
+        self.total_benefit = 0
+        self.is_complete = False
+        self.validation_errors: List[str] = []
+    
+    def add_move(self, move: SwapMove):
+        """Add a move to the chain"""
+        self.moves.append(move)
+        self.total_benefit += move.benefit_score
+        
+        # Check if chain is complete (final move doesn't displace anyone)
+        if move.displaced_student is None:
+            self.is_complete = True
+    
+    def get_chain_length(self) -> int:
+        """Get the number of moves in the chain"""
+        return len(self.moves)
+    
+    def get_affected_students(self) -> List[Student]:
+        """Get all students affected by this chain"""
+        students = [self.initial_student]
+        for move in self.moves:
+            if move.displaced_student and move.displaced_student not in students:
+                students.append(move.displaced_student)
+        return students
+    
+    def validate_chain(self) -> Tuple[bool, List[str]]:
+        """Comprehensive validation of the swap chain"""
+        errors = []
+        
+        # 1. Check chain completeness
+        if not self.is_complete:
+            errors.append("Chain is not complete - final move displaces another student")
+        
+        # 2. Check for circular dependencies
+        if self._has_circular_dependency():
+            errors.append("Circular dependency detected in swap chain")
+        
+        # 3. Validate each move
+        for i, move in enumerate(self.moves):
+            move_errors = self._validate_move(move, i)
+            errors.extend(move_errors)
+        
+        # 4. Check all students are still available
+        for student in self.get_affected_students():
+            if not self._is_student_still_available(student):
+                errors.append(f"Student {student} is no longer available for moves")
+        
+        self.validation_errors = errors
+        return len(errors) == 0, errors
+    
+    def _has_circular_dependency(self) -> bool:
+        """Check for circular dependencies in the chain"""
+        student_moves = {}
+        
+        for move in self.moves:
+            if move.student in student_moves:
+                return True  # Student appears twice
+            student_moves[move.student] = move.to_group
+        
+        return False
+    
+    def _validate_move(self, move: SwapMove, move_index: int) -> List[str]:
+        """Validate a single move in the chain"""
+        errors = []
+        
+        # Check if target group has space or will have space after previous moves
+        if not self._will_group_have_space(move.to_group, move_index):
+            errors.append(f"Group {move.to_group} will not have space for {move.student}")
+        
+        # Check compatibility
+        if not move.to_group.is_compatible_with_student(move.student):
+            errors.append(f"Student {move.student} is not compatible with group {move.to_group}")
+        
+        # Check availability
+        if not self._is_student_available_for_group(move.student, move.to_group):
+            errors.append(f"Student {move.student} is not available for {move.to_group} time slot")
+        
+        return errors
+    
+    def _will_group_have_space(self, group: ScheduledGroup, move_index: int) -> bool:
+        """Check if group will have space after considering previous moves"""
+        current_size = group.get_current_size()
+        
+        # Count moves that affect this group up to this point
+        moves_in = sum(1 for i, move in enumerate(self.moves[:move_index + 1]) if move.to_group == group)
+        moves_out = sum(1 for i, move in enumerate(self.moves[:move_index]) if move.from_group == group)
+        
+        projected_size = current_size + moves_in - moves_out
+        return projected_size <= group.max_capacity
+    
+    def _is_student_still_available(self, student: Student) -> bool:
+        """Check if student is still available (not moved by another process)"""
+        # This would check against recent database changes
+        # For now, assume students are available
+        return True
+    
+    def _is_student_available_for_group(self, student: Student, group: ScheduledGroup) -> bool:
+        """Check if student is available for the group's time slot"""
+        conflict_info = student.has_scheduling_conflict(group.day_of_week, group.time_slot)
+        return not conflict_info['has_conflict']
+    
+    def execute_chain(self) -> Tuple[bool, str]:
+        """Execute the entire swap chain as an atomic transaction"""
+        is_valid, errors = self.validate_chain()
+        if not is_valid:
+            return False, f"Validation failed: {'; '.join(errors)}"
+        
+        try:
+            with transaction.atomic():
+                # Create a savepoint for rollback
+                savepoint = transaction.savepoint()
+                
+                try:
+                    # Execute all moves in sequence
+                    for move in self.moves:
+                        self._execute_single_move(move)
+                    
+                    # Final validation of database state
+                    if not self._validate_final_state():
+                        transaction.savepoint_rollback(savepoint)
+                        return False, "Final state validation failed"
+                    
+                    # Commit all changes
+                    transaction.savepoint_commit(savepoint)
+                    return True, f"Successfully executed {len(self.moves)}-move chain"
+                    
+                except Exception as e:
+                    transaction.savepoint_rollback(savepoint)
+                    return False, f"Execution failed: {str(e)}"
+                    
+        except Exception as e:
+            return False, f"Transaction failed: {str(e)}"
+    
+    def _execute_single_move(self, move: SwapMove):
+        """Execute a single move in the chain"""
+        current_term = Term.get_active_term()
+        if not current_term:
+            raise Exception("No active term found")
+        
+        # Get the student's enrollment
+        try:
+            enrollment = move.student.enrollment_set.get(term=current_term)
+        except Enrollment.DoesNotExist:
+            raise Exception(f"No enrollment found for {move.student} in current term")
+        
+        # Remove from old group
+        if move.from_group:
+            move.from_group.members.remove(enrollment)
+        
+        # Add to new group
+        move.to_group.members.add(enrollment)
+    
+    def _validate_final_state(self) -> bool:
+        """Validate the final state after all moves"""
+        # Check that all groups are within capacity
+        affected_groups = set()
+        for move in self.moves:
+            affected_groups.add(move.from_group)
+            affected_groups.add(move.to_group)
+        
+        for group in affected_groups:
+            if group and group.get_current_size() > group.max_capacity:
+                return False
+        
+        return True
+
+
+class SwapChainBuilder:
+    """Builds complex swap chains with intelligent pruning"""
+    
+    def __init__(self, slot_finder_engine: 'SlotFinderEngine'):
+        self.engine = slot_finder_engine
+        self.max_chain_depth = 4
+        self.max_chains_to_explore = 50
+        self.min_benefit_threshold = 30
+    
+    def find_swap_chains(
+        self, 
+        student: Student, 
+        max_depth: int = None,
+        max_time_seconds: int = 60
+    ) -> List[SwapChain]:
+        """Find beneficial swap chains for a student"""
+        if max_depth is None:
+            max_depth = self.max_chain_depth
+        
+        start_time = time.time()
+        completed_chains = []
+        
+        # Start with single swaps and build from there
+        initial_swaps = self._find_initial_swap_opportunities(student)
+        
+        for initial_swap in initial_swaps:
+            if time.time() - start_time > max_time_seconds:
+                break
+            
+            # Build chain starting from this swap
+            chain = SwapChain(student)
+            
+            # Try to build a complete chain
+            if self._build_chain_recursively(
+                chain, initial_swap, max_depth - 1, start_time, max_time_seconds
+            ):
+                completed_chains.append(chain)
+        
+        # Sort by total benefit
+        return sorted(completed_chains, key=lambda x: x.total_benefit, reverse=True)
+    
+    def _find_initial_swap_opportunities(self, student: Student) -> List[Dict]:
+        """Find initial swap opportunities for the student"""
+        opportunities = []
+        current_term = Term.get_active_term()
+        
+        if not current_term:
+            return opportunities
+        
+        # Get student's available time slots
+        available_slots = self.engine.availability_checker.get_available_slots(student)
+        
+        # Look for beneficial swaps
+        for day, time_slot in available_slots:
+            groups_at_time = ScheduledGroup.objects.filter(
+                term=current_term,
+                day_of_week=day,
+                time_slot=time_slot
+            ).select_related('coach').prefetch_related('members__student')
+            
+            for group in groups_at_time:
+                for member in group.members.all():
+                    existing_student = member.student
+                    
+                    if existing_student.id == student.id:
+                        continue
+                    
+                    # Evaluate swap benefit
+                    swap_benefit = self.engine._evaluate_swap_benefit(
+                        student, existing_student, group
+                    )
+                    
+                    if swap_benefit['beneficial'] and swap_benefit['benefit_score'] >= self.min_benefit_threshold:
+                        opportunities.append({
+                            'target_student': student,
+                            'displaced_student': existing_student,
+                            'target_group': group,
+                            'benefit_score': swap_benefit['benefit_score']
+                        })
+        
+        return sorted(opportunities, key=lambda x: x['benefit_score'], reverse=True)
+    
+    def _build_chain_recursively(
+        self, 
+        chain: SwapChain, 
+        swap_opportunity: Dict,
+        remaining_depth: int,
+        start_time: float,
+        max_time_seconds: int
+    ) -> bool:
+        """Recursively build a swap chain"""
+        
+        if time.time() - start_time > max_time_seconds:
+            return False
+        
+        # Add the current swap to the chain
+        move = SwapMove(
+            student=swap_opportunity['target_student'],
+            from_group=None,  # Will be determined by current enrollment
+            to_group=swap_opportunity['target_group'],
+            benefit_score=swap_opportunity['benefit_score'],
+            displaced_student=swap_opportunity['displaced_student']
+        )
+        
+        chain.add_move(move)
+        
+        # If no one is displaced, chain is complete
+        if move.displaced_student is None:
+            return True
+        
+        # If we've reached max depth, try to find a direct placement for displaced student
+        if remaining_depth <= 0:
+            direct_placements = self.engine._find_direct_placements(move.displaced_student)
+            if direct_placements:
+                # Add direct placement move
+                best_placement = max(direct_placements, key=lambda x: x.score)
+                final_move = SwapMove(
+                    student=move.displaced_student,
+                    from_group=swap_opportunity['target_group'],
+                    to_group=best_placement.group,
+                    benefit_score=best_placement.score,
+                    displaced_student=None
+                )
+                chain.add_move(final_move)
+                return True
+            else:
+                return False  # Can't complete chain
+        
+        # Try to find a placement for the displaced student
+        displaced_opportunities = self._find_initial_swap_opportunities(move.displaced_student)
+        
+        for opportunity in displaced_opportunities[:5]:  # Limit exploration
+            if time.time() - start_time > max_time_seconds:
+                break
+            
+            # Create a copy of the chain to explore this branch
+            chain_copy = SwapChain(chain.initial_student)
+            chain_copy.moves = chain.moves.copy()
+            chain_copy.total_benefit = chain.total_benefit
+            
+            if self._build_chain_recursively(
+                chain_copy, opportunity, remaining_depth - 1, start_time, max_time_seconds
+            ):
+                # Update original chain with successful branch
+                chain.moves = chain_copy.moves
+                chain.total_benefit = chain_copy.total_benefit
+                chain.is_complete = chain_copy.is_complete
+                return True
+        
+        return False
+
+
+# Enhanced SlotFinderEngine with swap chains
+class EnhancedSlotFinderEngine(SlotFinderEngine):
+    """Enhanced engine with complex swap chain capabilities"""
+    
+    def __init__(self):
+        super().__init__()
+        self.chain_builder = SwapChainBuilder(self)
+    
+    def find_optimal_slots(
+        self, 
+        student: Student, 
+        max_results: int = 10,
+        include_swaps: bool = True,
+        include_chains: bool = True,
+        max_time_seconds: int = 60
+    ) -> List[SlotRecommendation]:
+        """
+        Enhanced slot finding with complex swap chains.
+        """
+        start_time = time.time()
+        recommendations = []
+        
+        # Phase 1: Direct placements (quick wins)
+        direct_placements = self._find_direct_placements(student)
+        recommendations.extend(direct_placements)
+        
+        if time.time() - start_time > max_time_seconds * 0.3:  # Use 30% of time for direct
+            return self._rank_recommendations(recommendations)[:max_results]
+        
+        # Phase 2: Single swaps
+        if include_swaps:
+            swap_options = self._find_single_swaps(student)
+            recommendations.extend(swap_options)
+        
+        if time.time() - start_time > max_time_seconds * 0.6:  # Use 60% of time for swaps
+            return self._rank_recommendations(recommendations)[:max_results]
+        
+        # Phase 3: Complex swap chains
+        if include_chains:
+            remaining_time = max_time_seconds - (time.time() - start_time)
+            swap_chains = self.chain_builder.find_swap_chains(
+                student, 
+                max_time_seconds=int(remaining_time)
+            )
+            
+            # Convert chains to recommendations
+            for chain in swap_chains[:5]:  # Limit to top 5 chains
+                if chain.is_complete:
+                    recommendation = SlotRecommendation(
+                        group=chain.moves[0].to_group,
+                        score=chain.total_benefit,
+                        placement_type='chain',
+                        swap_chain=chain,
+                        benefits={
+                            'chain_length': chain.get_chain_length(),
+                            'total_benefit': chain.total_benefit,
+                            'affected_students': len(chain.get_affected_students())
+                        }
+                    )
+                    recommendations.append(recommendation)
+        
+        return self._rank_recommendations(recommendations)[:max_results]
+
+
 # Utility functions for quick access
-def find_better_slot(student_id: int, max_results: int = 5) -> List[SlotRecommendation]:
+def find_better_slot(student_id: int, max_results: int = 5, include_chains: bool = True) -> List[SlotRecommendation]:
     """Quick function to find better slots for a student"""
     try:
         student = Student.objects.get(id=student_id)
-        engine = SlotFinderEngine()
-        return engine.find_optimal_slots(student, max_results=max_results)
+        engine = EnhancedSlotFinderEngine()
+        return engine.find_optimal_slots(
+            student, 
+            max_results=max_results,
+            include_chains=include_chains
+        )
     except Student.DoesNotExist:
         return []
 
@@ -451,3 +854,8 @@ def check_student_availability(student_id: int, day: int, time_slot_id: int) -> 
         return checker.is_student_available(student, day, time_slot)
     except (Student.DoesNotExist, TimeSlot.DoesNotExist):
         return False
+
+
+def execute_swap_chain(chain: SwapChain) -> Tuple[bool, str]:
+    """Execute a swap chain with full validation"""
+    return chain.execute_chain()

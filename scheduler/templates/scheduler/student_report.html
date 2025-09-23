@@ -118,9 +118,14 @@
                         <div class="col-12">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5 class="text-primary mb-0">Student Availability</h5>
-                                <button class="btn btn-outline-primary btn-sm" id="editAvailabilityBtn" onclick="toggleAvailabilityEdit()">
-                                    <i class="bi bi-pencil me-1"></i>Edit Individual Conflicts
-                                </button>
+                                <div class="btn-group">
+                                    <button class="btn btn-success btn-sm" onclick="findBetterSlot({{ student.id }})">
+                                        <i class="bi bi-search me-1"></i>Find Better Slot
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-sm" id="editAvailabilityBtn" onclick="toggleAvailabilityEdit()">
+                                        <i class="bi bi-pencil me-1"></i>Edit Individual Conflicts
+                                    </button>
+                                </div>
                             </div>
                             
                             <!-- Availability Legend -->
@@ -402,8 +407,180 @@
             // Show display
             displayDiv.classList.remove('d-none');
             editForm.classList.add('d-none');
-            editBtn.innerHTML = '<i class="bi bi-pencil me-1"></i>Edit Availability';
+            editBtn.innerHTML = '<i class="bi bi-pencil me-1"></i>Edit Individual Conflicts';
         }
+    }
+    
+    // Find better slot functionality
+    function findBetterSlot(studentId) {
+        // Show loading state
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Analyzing...';
+        button.disabled = true;
+        
+        // Make AJAX request to find better slots
+        fetch(`/api/find-better-slot/${studentId}/`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Restore button
+            button.innerHTML = originalText;
+            button.disabled = false;
+            
+            if (data.success) {
+                showSlotRecommendations(data.recommendations);
+            } else {
+                showError(data.error || 'Failed to find better slots');
+            }
+        })
+        .catch(error => {
+            // Restore button
+            button.innerHTML = originalText;
+            button.disabled = false;
+            showError('Network error: ' + error.message);
+        });
+    }
+    
+    // Show slot recommendations modal
+    function showSlotRecommendations(recommendations) {
+        if (recommendations.length === 0) {
+            showInfo('No better slots found. Current placement appears optimal!');
+            return;
+        }
+        
+        // Create modal content
+        let modalContent = `
+            <div class="modal fade" id="slotRecommendationsModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title">
+                                <i class="bi bi-search me-2"></i>Better Slots Found!
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-3">Found ${recommendations.length} better slot option(s):</p>
+        `;
+        
+        recommendations.forEach((rec, index) => {
+            const badgeClass = rec.placement_type === 'direct' ? 'bg-success' : 
+                              rec.placement_type === 'swap' ? 'bg-warning' : 'bg-info';
+            
+            modalContent += `
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${rec.group_name}</strong>
+                            <span class="badge ${badgeClass} ms-2">${rec.placement_type.toUpperCase()}</span>
+                        </div>
+                        <div class="text-end">
+                            <div class="h5 mb-0 text-success">${rec.score}/370</div>
+                            <small class="text-muted">${rec.percentage}% match</small>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Time:</strong> ${rec.day_name} ${rec.time_slot}</p>
+                                <p class="mb-1"><strong>Coach:</strong> ${rec.coach_name}</p>
+                                <p class="mb-1"><strong>Current Size:</strong> ${rec.current_size}/${rec.max_capacity}</p>
+                            </div>
+                            <div class="col-md-6">
+                                ${rec.placement_type === 'swap' ? 
+                                    `<p class="mb-1"><strong>Requires:</strong> Swap with ${rec.displaced_student}</p>` : 
+                                    ''}
+                                ${rec.placement_type === 'chain' ? 
+                                    `<p class="mb-1"><strong>Chain Length:</strong> ${rec.chain_length} moves</p>` : 
+                                    ''}
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <button class="btn btn-primary btn-sm" onclick="executeRecommendation(${index})">
+                                <i class="bi bi-check-circle me-1"></i>Move to This Slot
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" onclick="showRecommendationDetails(${index})">
+                                <i class="bi bi-info-circle me-1"></i>View Details
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        modalContent += `
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('slotRecommendationsModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to page and show
+        document.body.insertAdjacentHTML('beforeend', modalContent);
+        const modal = new bootstrap.Modal(document.getElementById('slotRecommendationsModal'));
+        modal.show();
+        
+        // Store recommendations for later use
+        window.currentRecommendations = recommendations;
+    }
+    
+    // Execute a recommendation
+    function executeRecommendation(index) {
+        const rec = window.currentRecommendations[index];
+        
+        if (confirm(`Are you sure you want to move this student to ${rec.group_name}?`)) {
+            // Implementation for executing the move
+            showInfo('Move functionality will be implemented in the next phase.');
+        }
+    }
+    
+    // Show recommendation details
+    function showRecommendationDetails(index) {
+        const rec = window.currentRecommendations[index];
+        showInfo('Detailed view will be implemented in the next phase.');
+    }
+    
+    // Utility functions for notifications
+    function showError(message) {
+        showNotification(message, 'danger');
+    }
+    
+    function showInfo(message) {
+        showNotification(message, 'info');
+    }
+    
+    function showNotification(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(alertDiv);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
     }
     
     console.log('Student report page loaded');

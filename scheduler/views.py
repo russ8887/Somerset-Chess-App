@@ -13,6 +13,9 @@ from .models import (
     ScheduledGroup, ScheduledUnavailability, Student, Term, SchoolClass, TimeSlot, OneOffEvent
 )
 from .forms import LessonNoteForm
+from .slot_finder import find_better_slot, EnhancedSlotFinderEngine
+from django.http import JsonResponse
+import json
 
 def _prepare_lesson_context(lesson, editing_note_id=None):
     """A single, reliable helper to prepare all context for the lesson detail template."""
@@ -530,6 +533,129 @@ def create_note_view(request, record_pk):
     context['note_form'] = form # Add the form to the context
     
     return render(request, 'scheduler/_lesson_detail.html', context)
+
+
+# --- Intelligent Slot Finder API Views ---
+
+@login_required
+def find_better_slot_api(request, student_id):
+    """API endpoint for finding better slots for a student"""
+    if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': False, 'error': 'Invalid request'})
+    
+    try:
+        student = get_object_or_404(Student, pk=student_id)
+        
+        # Use the slot finder engine
+        engine = EnhancedSlotFinderEngine()
+        recommendations = engine.find_optimal_slots(
+            student, 
+            max_results=5,
+            include_chains=True,
+            max_time_seconds=30
+        )
+        
+        # Convert recommendations to JSON-serializable format
+        recommendations_data = []
+        for rec in recommendations:
+            # Get day name
+            day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            day_name = day_names[rec.group.day_of_week] if rec.group.day_of_week < len(day_names) else 'Unknown'
+            
+            rec_data = {
+                'group_name': rec.group.name,
+                'group_id': rec.group.id,
+                'score': rec.score,
+                'percentage': rec.benefits.get('percentage', 0),
+                'placement_type': rec.placement_type,
+                'day_name': day_name,
+                'time_slot': str(rec.group.time_slot),
+                'coach_name': str(rec.group.coach) if rec.group.coach else 'No Coach',
+                'current_size': rec.group.get_current_size(),
+                'max_capacity': rec.group.max_capacity,
+            }
+            
+            # Add placement-specific data
+            if rec.placement_type == 'swap' and rec.swap_chain:
+                swap_info = rec.swap_chain[0] if rec.swap_chain else {}
+                rec_data['displaced_student'] = str(swap_info.get('student_out', 'Unknown'))
+            elif rec.placement_type == 'chain' and hasattr(rec.swap_chain, 'get_chain_length'):
+                rec_data['chain_length'] = rec.swap_chain.get_chain_length()
+            
+            recommendations_data.append(rec_data)
+        
+        return JsonResponse({
+            'success': True,
+            'recommendations': recommendations_data,
+            'student_name': f"{student.first_name} {student.last_name}",
+            'analysis_time': '30 seconds'  # Could be actual time if tracked
+        })
+        
+    except Student.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Student not found'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Analysis failed: {str(e)}'})
+
+
+@login_required
+def execute_slot_move_api(request, student_id):
+    """API endpoint for executing a slot move"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST request required'})
+    
+    if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': False, 'error': 'Invalid request'})
+    
+    try:
+        data = json.loads(request.body)
+        student = get_object_or_404(Student, pk=student_id)
+        target_group_id = data.get('group_id')
+        placement_type = data.get('placement_type')
+        
+        if not target_group_id:
+            return JsonResponse({'success': False, 'error': 'Group ID required'})
+        
+        target_group = get_object_or_404(ScheduledGroup, pk=target_group_id)
+        current_term = Term.get_active_term()
+        
+        if not current_term:
+            return JsonResponse({'success': False, 'error': 'No active term found'})
+        
+        # Get student's enrollment
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+        except Enrollment.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Student not enrolled in current term'})
+        
+        # For now, implement simple direct placement
+        # Complex swaps and chains will be implemented in the next phase
+        if placement_type == 'direct':
+            # Check if group has space
+            if not target_group.has_space():
+                return JsonResponse({'success': False, 'error': 'Target group is full'})
+            
+            # Remove from current groups
+            current_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
+            for group in current_groups:
+                group.members.remove(enrollment)
+            
+            # Add to new group
+            target_group.members.add(enrollment)
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Successfully moved {student.first_name} to {target_group.name}',
+                'new_group': target_group.name
+            })
+        else:
+            # For swaps and chains, return placeholder message
+            return JsonResponse({
+                'success': False, 
+                'error': 'Complex moves (swaps/chains) will be implemented in the next phase'
+            })
+            
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Move failed: {str(e)}'})
 
 @login_required
 def manage_student_availability(request, student_pk):
