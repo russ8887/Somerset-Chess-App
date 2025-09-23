@@ -754,11 +754,52 @@ def execute_slot_move_api(request, student_id):
                 return JsonResponse({'success': False, 'error': f'Swap failed: {str(e)}'})
                 
         elif placement_type == 'chain':
-            # For complex chains, return informative message about future implementation
-            return JsonResponse({
-                'success': False, 
-                'error': 'Complex chain moves require advanced validation and will be implemented in the next phase. Please try a direct placement or simple swap instead.'
-            })
+            # Handle complex chain moves by re-running the slot finder to get the chain
+            try:
+                # Import the enhanced slot finder engine
+                from .slot_finder import EnhancedSlotFinderEngine
+                
+                # Re-run the slot finder to get fresh chain recommendations
+                engine = EnhancedSlotFinderEngine()
+                recommendations = engine.find_optimal_slots(
+                    student, 
+                    max_results=10,
+                    include_chains=True,
+                    max_time_seconds=120  # 2 minutes for chain execution
+                )
+                
+                # Find the chain recommendation for the target group
+                target_chain = None
+                for rec in recommendations:
+                    if (rec.placement_type == 'chain' and 
+                        rec.group.id == target_group.id and 
+                        hasattr(rec, 'swap_chain') and 
+                        rec.swap_chain):
+                        target_chain = rec.swap_chain
+                        break
+                
+                if not target_chain:
+                    return JsonResponse({
+                        'success': False, 
+                        'error': 'Chain recommendation not found. The optimal chain may have changed. Please try finding better slots again.'
+                    })
+                
+                # Execute the chain using the existing infrastructure
+                success, message = target_chain.execute_chain()
+                
+                if success:
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Successfully executed {target_chain.get_chain_length()}-move chain for {student.first_name}',
+                        'chain_length': target_chain.get_chain_length(),
+                        'affected_students': len(target_chain.get_affected_students()),
+                        'details': message
+                    })
+                else:
+                    return JsonResponse({'success': False, 'error': f'Chain execution failed: {message}'})
+                    
+            except Exception as e:
+                return JsonResponse({'success': False, 'error': f'Chain move failed: {str(e)}'})
         else:
             return JsonResponse({'success': False, 'error': f'Unknown placement type: {placement_type}'})
             
