@@ -12,16 +12,26 @@
         </div>
         <ul class="list-group list-group-flush">
             {% for record in lesson.attendancerecord_set.all %}
-            <li class="list-group-item" id="student-row-{{ record.pk }}">
+            <li class="list-group-item{% if record.has_conflict %} border-danger border-2{% endif %}" id="student-row-{{ record.pk }}">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <a href="{% url 'student-report' record.enrollment.student.pk lesson.scheduled_group.term.pk %}?date={{ lesson.lesson_date|date:'Y-m-d' }}{% if request.GET.coach %}&coach={{ request.GET.coach }}{% endif %}"
-                       class="student-link fw-bold text-dark text-decoration-none">
-                        {{ record.enrollment.student }}
-                        <small class="text-muted">({{ record.enrollment.get_enrollment_type_display }})</small>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{% url 'student-report' record.enrollment.student.pk lesson.scheduled_group.term.pk %}?date={{ lesson.lesson_date|date:'Y-m-d' }}{% if request.GET.coach %}&coach={{ request.GET.coach }}{% endif %}"
+                           class="student-link fw-bold text-dark text-decoration-none">
+                            {{ record.enrollment.student }}
+                            <small class="text-muted">({{ record.enrollment.get_enrollment_type_display }})</small>
+                        </a>
+                        
                         {% if record.status == 'FILL_IN' %}
                             <span class="badge bg-info">Fill-in</span>
                         {% endif %}
-                    </a>
+                        
+                        {% if record.has_conflict %}
+                            <span class="badge bg-danger text-white" title="{{ record.conflict_description }}">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>CONFLICT
+                            </span>
+                            <small class="text-danger fst-italic">{{ record.conflict_type|title }} conflict</small>
+                        {% endif %}
+                    </div>
                 </div>
 
                 <div class="controls d-flex flex-wrap align-items-center gap-2">

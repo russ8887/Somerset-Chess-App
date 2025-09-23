@@ -167,19 +167,33 @@
                                                 {% with class_slots=class_unavailable_slots|lookup:day_int %}
                                                 {% with individual_slots=individual_unavailable_slots|lookup:day_int %}
                                                 <td class="text-center p-2">
+                                                    {% comment %}Check if student has a scheduled lesson at this time{% endcomment %}
+                                                    {% with has_scheduled_lesson=False %}
+                                                    {% for record in records %}
+                                                        {% if record.lesson_session.lesson_date.weekday == day_int and record.lesson_session.scheduled_group.time_slot.pk == time_slot.pk %}
+                                                            {% with has_scheduled_lesson=True %}
+                                                            {% endwith %}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                    
                                                     {% if time_slot.pk in class_slots %}
-                                                        <span class="badge bg-danger text-white px-2 py-1">
+                                                        <span class="badge bg-danger text-white px-2 py-1{% if has_scheduled_lesson %} border border-warning border-3{% endif %}" 
+                                                              {% if has_scheduled_lesson %}title="SCHEDULING CONFLICT: Student has lesson but class unavailable!"{% endif %}>
                                                             <i class="bi bi-x-circle"></i> Class
+                                                            {% if has_scheduled_lesson %}<i class="bi bi-exclamation-triangle-fill ms-1"></i>{% endif %}
                                                         </span>
                                                     {% elif time_slot.pk in individual_slots %}
-                                                        <span class="badge bg-warning text-dark px-2 py-1">
+                                                        <span class="badge bg-warning text-dark px-2 py-1{% if has_scheduled_lesson %} border border-danger border-3{% endif %}"
+                                                              {% if has_scheduled_lesson %}title="SCHEDULING CONFLICT: Student has lesson but individually unavailable!"{% endif %}>
                                                             <i class="bi bi-person-x"></i> Individual
+                                                            {% if has_scheduled_lesson %}<i class="bi bi-exclamation-triangle-fill ms-1"></i>{% endif %}
                                                         </span>
                                                     {% else %}
                                                         <span class="badge bg-success text-white px-2 py-1">
                                                             <i class="bi bi-check-circle"></i> Available
                                                         </span>
                                                     {% endif %}
+                                                    {% endwith %}
                                                 </td>
                                                 {% endwith %}
                                                 {% endwith %}

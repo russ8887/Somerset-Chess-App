@@ -17,6 +17,13 @@ from .forms import LessonNoteForm
 def _prepare_lesson_context(lesson, editing_note_id=None):
     """A single, reliable helper to prepare all context for the lesson detail template."""
     lesson.has_absences = lesson.attendancerecord_set.filter(status='ABSENT').exists()
+    
+    # Add conflict information to attendance records
+    for record in lesson.attendancerecord_set.all():
+        # Cache conflict info to avoid repeated database queries
+        if not hasattr(record, '_conflict_info'):
+            record._conflict_info = record.get_scheduling_conflict()
+    
     return {'lesson': lesson, 'editing_note_id': editing_note_id}
 
 # --- Main Page Views ---

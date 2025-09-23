@@ -78,6 +78,85 @@ class Student(models.Model):
         # Safely gets the school class name if it exists.
         school_class_name = getattr(self.school_class, 'name', 'N/A')
         return f"{self.first_name} {self.last_name} ({school_class_name})"
+    
+    def has_scheduling_conflict(self, day_of_week, time_slot):
+        """
+        Check if student has a scheduling conflict at the given day/time.
+        Returns dict with conflict info or None if no conflict.
+        """
+        # Check individual unavailabilities
+        individual_conflicts = ScheduledUnavailability.objects.filter(
+            students=self,
+            day_of_week=day_of_week,
+            time_slot=time_slot
+        )
+        
+        if individual_conflicts.exists():
+            return {
+                'has_conflict': True,
+                'conflict_type': 'individual',
+                'conflict_source': individual_conflicts.first().name,
+                'conflict_description': f'Individual conflict: {individual_conflicts.first().name}'
+            }
+        
+        # Check class-based unavailabilities
+        if self.school_class:
+            class_conflicts = ScheduledUnavailability.objects.filter(
+                school_classes=self.school_class,
+                day_of_week=day_of_week,
+                time_slot=time_slot
+            )
+            
+            if class_conflicts.exists():
+                return {
+                    'has_conflict': True,
+                    'conflict_type': 'class',
+                    'conflict_source': class_conflicts.first().name,
+                    'conflict_description': f'Class conflict: {class_conflicts.first().name}'
+                }
+        
+        return {
+            'has_conflict': False,
+            'conflict_type': None,
+            'conflict_source': None,
+            'conflict_description': None
+        }
+    
+    def get_scheduled_lessons_with_conflicts(self, term=None):
+        """
+        Get all scheduled lessons for this student that have scheduling conflicts.
+        Returns list of dicts with lesson and conflict info.
+        """
+        if not term:
+            term = Term.get_active_term()
+        
+        if not term:
+            return []
+        
+        conflicts = []
+        
+        # Get all enrollments for this student in the term
+        enrollments = self.enrollment_set.filter(term=term)
+        
+        for enrollment in enrollments:
+            # Get all scheduled groups this student is in
+            scheduled_groups = enrollment.scheduledgroup_set.all()
+            
+            for group in scheduled_groups:
+                # Check if this group's schedule conflicts with student availability
+                conflict_info = self.has_scheduling_conflict(
+                    group.day_of_week, 
+                    group.time_slot
+                )
+                
+                if conflict_info['has_conflict']:
+                    conflicts.append({
+                        'enrollment': enrollment,
+                        'scheduled_group': group,
+                        'conflict_info': conflict_info
+                    })
+        
+        return conflicts
 
 class Enrollment(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
@@ -313,6 +392,36 @@ class AttendanceRecord(models.Model):
     # This is the crucial helper method that your template needs to work
     def get_absence_reasons(self):
         return self.AbsenceReason.choices
+    
+    def get_scheduling_conflict(self):
+        """
+        Check if this attendance record represents a scheduling conflict.
+        Returns conflict info dict or None if no conflict.
+        """
+        # Get the lesson's day of week and time slot
+        lesson_day = self.lesson_session.lesson_date.weekday()
+        lesson_time_slot = self.lesson_session.scheduled_group.time_slot
+        
+        # Check if student has conflict at this time
+        return self.enrollment.student.has_scheduling_conflict(lesson_day, lesson_time_slot)
+    
+    @property
+    def has_conflict(self):
+        """Quick property to check if this record has a scheduling conflict"""
+        conflict_info = self.get_scheduling_conflict()
+        return conflict_info['has_conflict'] if conflict_info else False
+    
+    @property
+    def conflict_type(self):
+        """Get the type of conflict (class/individual) or None"""
+        conflict_info = self.get_scheduling_conflict()
+        return conflict_info['conflict_type'] if conflict_info and conflict_info['has_conflict'] else None
+    
+    @property
+    def conflict_description(self):
+        """Get human-readable conflict description"""
+        conflict_info = self.get_scheduling_conflict()
+        return conflict_info['conflict_description'] if conflict_info and conflict_info['has_conflict'] else None
 
 class LessonNote(models.Model):
     attendance_record = models.OneToOneField(AttendanceRecord, on_delete=models.CASCADE, related_name="lessonnote")
