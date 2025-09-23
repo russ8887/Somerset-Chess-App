@@ -553,7 +553,24 @@ def find_better_slot_api(request, student_id):
     start_time = time_module.time()
     
     try:
-        student = get_object_or_404(Student, pk=student_id)
+        # First check if student exists with detailed logging
+        logger.info(f"Attempting to find student with ID: {student_id}")
+        
+        try:
+            student = Student.objects.get(pk=student_id)
+            logger.info(f"✅ Found student {student.id} ({student.first_name} {student.last_name})")
+        except Student.DoesNotExist:
+            logger.error(f"❌ Student with ID {student_id} does not exist")
+            # Let's also check what student IDs actually exist
+            existing_ids = list(Student.objects.values_list('id', flat=True).order_by('id')[:10])
+            logger.info(f"First 10 existing student IDs: {existing_ids}")
+            total_students = Student.objects.count()
+            logger.info(f"Total students in database: {total_students}")
+            return JsonResponse({
+                'success': False, 
+                'error': f'Student ID {student_id} not found. There are {total_students} students in the system.'
+            })
+        
         logger.info(f"Starting slot finder analysis for student {student.id} ({student.first_name} {student.last_name})")
         
         # Check if there's an active term

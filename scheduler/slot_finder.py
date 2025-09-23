@@ -408,40 +408,73 @@ class SlotFinderEngine:
     
     def _find_direct_placements(self, student: Student) -> List[SlotRecommendation]:
         """Find groups with available space that student can join directly - STRICT TYPE MATCHING"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         recommendations = []
         current_term = Term.get_active_term()
         
         if not current_term:
+            logger.error(f"❌ No current term for direct placements")
             return recommendations
         
         # Get student's enrollment type
         try:
             enrollment = student.enrollment_set.get(term=current_term)
             student_enrollment_type = enrollment.enrollment_type
+            logger.info(f"🔍 Direct placement search for {student.first_name} (enrollment type: {student_enrollment_type})")
         except Enrollment.DoesNotExist:
+            logger.error(f"❌ Student {student.first_name} not enrolled in current term")
             return recommendations  # Can't place if no enrollment
         
         # Get student's available time slots
         available_slots = self.availability_checker.get_available_slots(student)
+        logger.info(f"📅 Student has {len(available_slots)} available time slots")
+        
+        total_groups_checked = 0
+        compatible_groups_found = 0
+        groups_with_space = 0
         
         # Find groups with space at those times
         for day, time_slot in available_slots:
+            day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+            day_name = day_names[day] if day < len(day_names) else f'Day {day}'
+            
             groups_at_time = ScheduledGroup.objects.filter(
                 term=current_term,
                 day_of_week=day,
                 time_slot=time_slot
             ).select_related('coach').prefetch_related('members')
             
+            groups_count = groups_at_time.count()
+            total_groups_checked += groups_count
+            logger.info(f"📍 {day_name} {time_slot}: Found {groups_count} groups")
+            
             for group in groups_at_time:
+                logger.info(f"   🔍 Checking group: {group.name} (type: {group.group_type}, size: {group.get_current_size()}/{group.max_capacity})")
+                
                 # Only consider groups of compatible type
-                if not self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type):
+                is_type_compatible = self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type)
+                if not is_type_compatible:
+                    logger.info(f"   ❌ Type incompatible: {student_enrollment_type} ≠ {group.group_type}")
                     continue
                 
-                if group.has_space() and group.is_compatible_with_student(student):
+                compatible_groups_found += 1
+                logger.info(f"   ✅ Type compatible: {student_enrollment_type} = {group.group_type}")
+                
+                has_space = group.has_space()
+                is_compatible = group.is_compatible_with_student(student)
+                
+                logger.info(f"   📊 Has space: {has_space}, Is compatible: {is_compatible}")
+                
+                if has_space and is_compatible:
+                    groups_with_space += 1
                     # Calculate compatibility score
                     score_info = self.compatibility_scorer.calculate_compatibility_score(
                         student, group, group.coach
                     )
+                    
+                    logger.info(f"   🎯 MATCH FOUND! Score: {score_info['total_score']}/370 ({score_info['percentage']}%)")
                     
                     recommendation = SlotRecommendation(
                         group=group,
@@ -456,6 +489,17 @@ class SlotFinderEngine:
                         }
                     )
                     recommendations.append(recommendation)
+                else:
+                    if not has_space:
+                        logger.info(f"   ❌ No space available")
+                    if not is_compatible:
+                        logger.info(f"   ❌ Student not compatible with group")
+        
+        logger.info(f"📊 DIRECT PLACEMENT SUMMARY:")
+        logger.info(f"   Total groups checked: {total_groups_checked}")
+        logger.info(f"   Compatible type groups: {compatible_groups_found}")
+        logger.info(f"   Groups with space: {groups_with_space}")
+        logger.info(f"   Recommendations found: {len(recommendations)}")
         
         return recommendations
     
@@ -992,11 +1036,27 @@ class EnhancedSlotFinderEngine(SlotFinderEngine):
         Enhanced slot finding with complex swap chains and bulk optimization.
         Always returns some options when possible, including alternative placements.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         start_time = time.time()
         recommendations = []
         current_term = Term.get_active_term()
         
+        logger.info(f"🔍 SLOT FINDER DEBUG: Starting analysis for student {student.id} ({student.first_name} {student.last_name})")
+        
         if not current_term:
+            logger.error(f"❌ No active term found")
+            return recommendations
+        
+        logger.info(f"✅ Active term: {current_term.name}")
+        
+        # Check student enrollment
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+            logger.info(f"✅ Student enrollment found: {enrollment.enrollment_type} type")
+        except Enrollment.DoesNotExist:
+            logger.error(f"❌ Student not enrolled in current term")
             return recommendations
         
         # Bulk prefetch lesson balances for performance optimization
