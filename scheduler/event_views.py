@@ -257,7 +257,7 @@ def create_custom_event(request):
                 f'Custom event "{event.name}" created successfully! '
                 f'Will affect approximately {affected_count} students.'
             )
-        return redirect('event-management-dashboard')
+            return redirect('event-management-dashboard')
     else:
         form = CustomEventForm()
     

@@ -142,15 +142,36 @@ class DashboardView(LoginRequiredMixin, ListView):
                             )
                             # Check if student is in this lesson
                             if enrollment in lesson.scheduled_group.members.all():
-                                # Mark as absent with the event reason
-                                AttendanceRecord.objects.update_or_create(
+                                # Mark as absent with the specific event reason
+                                # Map event types to appropriate absence reasons
+                                reason_mapping = {
+                                    'PUBLIC_HOLIDAY': 'CLASS_EVENT',
+                                    'PUPIL_FREE_DAY': 'CLASS_EVENT', 
+                                    'CAMP': 'CLASS_EVENT',
+                                    'EXCURSION': 'CLASS_EVENT',
+                                    'INDIVIDUAL': 'OTHER',
+                                    'CUSTOM': 'CLASS_EVENT'
+                                }
+                                
+                                absence_reason = reason_mapping.get(event.event_type, 'CLASS_EVENT')
+                                
+                                attendance_record, created = AttendanceRecord.objects.update_or_create(
                                     lesson_session=lesson,
                                     enrollment=enrollment,
                                     defaults={
                                         'status': 'ABSENT',
-                                        'reason_for_absence': 'CLASS_EVENT'  # Use existing reason or could add custom
+                                        'reason_for_absence': absence_reason
                                     }
                                 )
+                                
+                                # Create a lesson note with the specific event reason for better tracking
+                                if created or not hasattr(attendance_record, 'lessonnote'):
+                                    LessonNote.objects.update_or_create(
+                                        attendance_record=attendance_record,
+                                        defaults={
+                                            'coach_comments': f"Absent due to: {event.reason} ({event.name})"
+                                        }
+                                    )
                         except Enrollment.DoesNotExist:
                             continue  # Student not enrolled in this term
 
