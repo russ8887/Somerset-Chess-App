@@ -1,4 +1,5 @@
 {% extends 'scheduler/base.html' %}
+{% load scheduler_extras %}
 
 {% block content %}
 <div class="row">
@@ -112,34 +113,102 @@
                         </div>
                     </div>
 
-                    <!-- Individual Availability Management -->
+                    <!-- Enhanced Availability Management -->
                     <div class="row mb-4">
                         <div class="col-12">
                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h5 class="text-primary mb-0">Individual Availability</h5>
+                                <h5 class="text-primary mb-0">Student Availability</h5>
                                 <button class="btn btn-outline-primary btn-sm" id="editAvailabilityBtn" onclick="toggleAvailabilityEdit()">
-                                    <i class="bi bi-pencil me-1"></i>Edit Availability
+                                    <i class="bi bi-pencil me-1"></i>Edit Individual Conflicts
                                 </button>
                             </div>
                             
+                            <!-- Availability Legend -->
+                            <div class="mb-3">
+                                <div class="d-flex flex-wrap gap-3 align-items-center">
+                                    <span class="badge bg-success fs-6 px-3 py-2">
+                                        <i class="bi bi-check-circle me-1"></i>Available
+                                    </span>
+                                    <span class="badge bg-danger fs-6 px-3 py-2">
+                                        <i class="bi bi-x-circle me-1"></i>Class Unavailable (inherited from {{ student.school_class.name|default:"class" }})
+                                    </span>
+                                    <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+                                        <i class="bi bi-person-x me-1"></i>Individual Conflict (editable)
+                                    </span>
+                                </div>
+                            </div>
+                            
                             <div id="availabilityDisplay" class="mb-3">
-                                <p class="text-muted">
+                                <p class="text-muted mb-3">
                                     <i class="bi bi-info-circle me-1"></i>
-                                    Individual availability overrides are managed here. If no individual conflicts are set, 
-                                    the student follows their class availability schedule.
+                                    This shows all unavailabilities for {{ student.first_name }}. Class conflicts are inherited from their school class, 
+                                    while individual conflicts can be added for specific scheduling needs.
                                 </p>
-                                {% if individual_unavailabilities %}
-                                    <div class="d-flex flex-wrap gap-2">
-                                        {% for unavail in individual_unavailabilities %}
-                                            <span class="badge bg-warning text-dark fs-6 px-3 py-2">
-                                                <i class="bi bi-calendar-x me-1"></i>
-                                                {{ unavail.get_day_of_week_display }} {{ unavail.time_slot }}
-                                            </span>
-                                        {% endfor %}
-                                    </div>
-                                {% else %}
-                                    <span class="text-muted fst-italic">No individual availability conflicts set</span>
-                                {% endif %}
+                                
+                                <!-- Enhanced Availability Grid -->
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Time Slot</th>
+                                                <th>Monday</th>
+                                                <th>Tuesday</th>
+                                                <th>Wednesday</th>
+                                                <th>Thursday</th>
+                                                <th>Friday</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for time_slot in time_slots %}
+                                            <tr>
+                                                <td class="fw-semibold">{{ time_slot }}</td>
+                                                {% for day_num in "01234" %}
+                                                {% with day_int=day_num|add:0 %}
+                                                {% with class_slots=class_unavailable_slots|lookup:day_int %}
+                                                {% with individual_slots=individual_unavailable_slots|lookup:day_int %}
+                                                <td class="text-center p-2">
+                                                    {% if time_slot.pk in class_slots %}
+                                                        <span class="badge bg-danger text-white px-2 py-1">
+                                                            <i class="bi bi-x-circle"></i> Class
+                                                        </span>
+                                                    {% elif time_slot.pk in individual_slots %}
+                                                        <span class="badge bg-warning text-dark px-2 py-1">
+                                                            <i class="bi bi-person-x"></i> Individual
+                                                        </span>
+                                                    {% else %}
+                                                        <span class="badge bg-success text-white px-2 py-1">
+                                                            <i class="bi bi-check-circle"></i> Available
+                                                        </span>
+                                                    {% endif %}
+                                                </td>
+                                                {% endwith %}
+                                                {% endwith %}
+                                                {% endwith %}
+                                                {% endfor %}
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Summary badges -->
+                                <div class="d-flex flex-wrap gap-2 mt-3">
+                                    {% if class_unavailabilities %}
+                                        <span class="badge bg-danger fs-6 px-3 py-2">
+                                            <i class="bi bi-building me-1"></i>{{ class_unavailabilities|length }} Class Conflicts
+                                        </span>
+                                    {% endif %}
+                                    {% if individual_unavailabilities %}
+                                        <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+                                            <i class="bi bi-person me-1"></i>{{ individual_unavailabilities|length }} Individual Conflicts
+                                        </span>
+                                    {% endif %}
+                                    {% if not class_unavailabilities and not individual_unavailabilities %}
+                                        <span class="badge bg-success fs-6 px-3 py-2">
+                                            <i class="bi bi-check-circle me-1"></i>No Scheduling Conflicts
+                                        </span>
+                                    {% endif %}
+                                </div>
                             </div>
 
                             <div id="availabilityEditForm" class="d-none">

@@ -259,15 +259,42 @@ def student_report_view(request, student_pk, term_pk):
         
         # Get individual availability data
         individual_unavailabilities = ScheduledUnavailability.objects.filter(students=student)
+        
+        # Get class-based unavailabilities (inherited from student's class)
+        class_unavailabilities = ScheduledUnavailability.objects.filter(
+            school_classes=student.school_class
+        ) if student.school_class else ScheduledUnavailability.objects.none()
+        
         time_slots = TimeSlot.objects.all().order_by('start_time')
         
-        # Create a map of unavailable slots for the form
-        unavailable_slots = {}
+        # Create comprehensive availability maps
+        individual_unavailable_slots = {}
+        class_unavailable_slots = {}
+        
+        # Map individual unavailabilities
         for unavail in individual_unavailabilities:
             day = unavail.day_of_week
-            if day not in unavailable_slots:
-                unavailable_slots[day] = []
-            unavailable_slots[day].append(unavail.time_slot.pk)
+            if day not in individual_unavailable_slots:
+                individual_unavailable_slots[day] = []
+            individual_unavailable_slots[day].append(unavail.time_slot.pk)
+        
+        # Map class-based unavailabilities
+        for unavail in class_unavailabilities:
+            day = unavail.day_of_week
+            if day not in class_unavailable_slots:
+                class_unavailable_slots[day] = []
+            class_unavailable_slots[day].append(unavail.time_slot.pk)
+        
+        # Create combined unavailable slots for backward compatibility
+        unavailable_slots = {}
+        for day in range(5):  # Monday to Friday
+            unavailable_slots[day] = []
+            if day in individual_unavailable_slots:
+                unavailable_slots[day].extend(individual_unavailable_slots[day])
+            if day in class_unavailable_slots:
+                unavailable_slots[day].extend(class_unavailable_slots[day])
+            # Remove duplicates
+            unavailable_slots[day] = list(set(unavailable_slots[day]))
         
         logger.info(f"Attendance summary: {total_attended} total attended, {absent_count} absent")
 
@@ -290,8 +317,11 @@ def student_report_view(request, student_pk, term_pk):
             'class_event_count': class_event_count,
             # Availability data
             'individual_unavailabilities': individual_unavailabilities,
+            'class_unavailabilities': class_unavailabilities,
             'time_slots': time_slots,
             'unavailable_slots': unavailable_slots,
+            'individual_unavailable_slots': individual_unavailable_slots,
+            'class_unavailable_slots': class_unavailable_slots,
         }
         
         # Add debug info to template for troubleshooting

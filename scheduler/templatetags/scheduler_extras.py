@@ -45,3 +45,26 @@ def is_checked(availability_map, slot_pk, day_index):
     if (slot_pk, day_index) in availability_map:
         return "checked"
     return ""
+
+@register.filter
+def lookup(dictionary, key):
+    """
+    Allows dictionary lookups using a variable key in templates.
+    Usage: {{ dict|lookup:key }}
+    """
+    if dictionary and key is not None:
+        return dictionary.get(key, [])
+    return []
+
+@register.filter
+def contains(list_or_dict, item):
+    """
+    Checks if an item is in a list or dictionary.
+    Usage: {{ list|contains:item }}
+    """
+    if list_or_dict is None:
+        return False
+    try:
+        return item in list_or_dict
+    except (TypeError, ValueError):
+        return False
