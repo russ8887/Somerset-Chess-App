@@ -610,6 +610,7 @@ def find_better_slot_api(request, student_id):
                     'coach_name': str(rec.group.coach) if rec.group.coach else 'No Coach',
                     'current_size': rec.group.get_current_size(),
                     'max_capacity': rec.group.get_type_based_max_capacity(),
+                    'score_breakdown': rec.benefits.get('score_breakdown', {}),
                 }
                 
                 # Add placement-specific data
