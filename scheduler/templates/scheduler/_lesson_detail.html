@@ -88,27 +88,7 @@
                     {% endif %}
                 </div>
 
-                {# --- Note Editing Form (only appears when editing) --- #}
-                {% if editing_note_id == record.lessonnote.id %}
-                <div class="note-form-container mt-3">
-                    <form hx-post="{% url 'edit-note' record.lessonnote.pk %}" class="note-form">
-                        {% csrf_token %}
-                        {{ note_form.as_p }}
-                        
-                        <div class="mb-2">
-                            <button type="submit" class="btn btn-primary btn-sm">Save Note</button>
-                            <button type="button" class="btn btn-secondary btn-sm" hx-get="{% url 'view-note' record.lessonnote.pk %}">Cancel</button>
-                        </div>
-                    </form>
-                    <div class="prefilled-notes">
-                        <small>Quick Add:</small>
-                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_topics_covered', 'Opening principles')">Opening</button>
-                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_topics_covered', 'Endgame practice')">Endgame</button>
-                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_coach_comments', 'Good focus')">Good focus</button>
-                        <button type="button" class="btn btn-outline-info btn-sm" onclick="addPrefilledNote('id_coach_comments', 'Needs review')">Needs review</button>
-                    </div>
-                </div>
-                {% endif %}
+                {# Note editing form removed - editing_note_id variable not passed from view #}
             </li>
             {% empty %}
             <li class="list-group-item text-muted">

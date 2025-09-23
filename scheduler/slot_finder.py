@@ -483,7 +483,7 @@ class SlotFinderEngine:
                 term=current_term,
                 day_of_week=day,
                 time_slot=time_slot
-            ).select_related('coach').prefetch_related('members__student__enrollment')
+            ).select_related('coach').prefetch_related('members__student')
             
             for group in groups_at_time:
                 # Only consider groups of compatible type

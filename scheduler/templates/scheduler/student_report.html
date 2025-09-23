@@ -330,23 +330,21 @@
                                                         </div>
                                                     {% endif %}
                                                     {# Safely check for lesson notes without causing RelatedObjectDoesNotExist #}
-                                                    {% if record.lesson_session.lessonnote_set.exists %}
-                                                        {% for note in record.lesson_session.lessonnote_set.all %}
-                                                            {% if note.topics_covered %}
-                                                                <div class="mb-1">
-                                                                    <strong class="text-info">Topics:</strong> 
-                                                                    <span class="text-muted">{{ note.topics_covered }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                            {% if note.coach_comments %}
-                                                                <div class="mb-1">
-                                                                    <strong class="text-success">Comments:</strong> 
-                                                                    <span class="text-muted">{{ note.coach_comments }}</span>
-                                                                </div>
-                                                            {% endif %}
-                                                        {% endfor %}
+                                                    {% if record.lessonnote %}
+                                                        {% if record.lessonnote.topics_covered %}
+                                                            <div class="mb-1">
+                                                                <strong class="text-info">Topics:</strong> 
+                                                                <span class="text-muted">{{ record.lessonnote.topics_covered }}</span>
+                                                            </div>
+                                                        {% endif %}
+                                                        {% if record.lessonnote.coach_comments %}
+                                                            <div class="mb-1">
+                                                                <strong class="text-success">Comments:</strong> 
+                                                                <span class="text-muted">{{ record.lessonnote.coach_comments }}</span>
+                                                            </div>
+                                                        {% endif %}
                                                     {% endif %}
-                                                    {% if not record.reason_for_absence and not record.lesson_session.lessonnote_set.exists %}
+                                                    {% if not record.reason_for_absence and not record.lessonnote %}
                                                         <span class="text-muted fst-italic">No additional details</span>
                                                     {% endif %}
                                                 </td>
