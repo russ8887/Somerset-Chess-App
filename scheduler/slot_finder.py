@@ -268,26 +268,25 @@ class CompatibilityScorer:
             return 0
     
     def _calculate_group_size_score(self, student: Student, group: ScheduledGroup) -> int:
-        """Calculate group size preference score based on student's enrollment type"""
+        """Calculate group size preference score based on student's enrollment type - STRICT MATCHING"""
         # Get the student's current enrollment type from active term
         current_term = Term.get_active_term()
         if not current_term:
-            return 20  # Neutral score if no active term
+            return 0  # No score if no active term
         
         try:
             enrollment = student.enrollment_set.get(term=current_term)
             student_enrollment_type = enrollment.enrollment_type
             
+            # Strict matching: SOLO only SOLO, PAIR only PAIR, GROUP can do PAIR or GROUP
             if student_enrollment_type == group.group_type:
-                return 50  # Perfect match - student enrolled for this type
-            elif student_enrollment_type == 'GROUP' and group.group_type in ['PAIR', 'GROUP']:
-                return 30  # Flexible - group students can do pairs or groups
-            elif student_enrollment_type == 'PAIR' and group.group_type == 'GROUP':
-                return 25  # Acceptable - pair student in group setting
+                return 50  # Perfect match
+            elif student_enrollment_type == 'GROUP' and group.group_type == 'PAIR':
+                return 25  # Acceptable - group student in pair slot
             else:
-                return 10  # Not ideal but possible
+                return 0  # No match - different enrollment types
         except Enrollment.DoesNotExist:
-            return 20  # Neutral if no enrollment found
+            return 0  # No score if no enrollment
     
     def _calculate_coach_score(self, student: Student, coach: Coach) -> int:
         """Calculate coach specialization score"""
@@ -346,6 +345,26 @@ class CompatibilityScorer:
         else:
             return 0  # Group is full
 
+    def _is_group_type_compatible(self, student_enrollment_type, group_type):
+        """Check if student's enrollment type is compatible with group type"""
+        if student_enrollment_type == 'SOLO':
+            return group_type == 'SOLO'
+        elif student_enrollment_type == 'PAIR':
+            return group_type == 'PAIR'
+        elif student_enrollment_type == 'GROUP':
+            return group_type in ['PAIR', 'GROUP']
+        return False
+
+    def _is_enrollment_type_compatible(self, student_type, displaced_type):
+        """Check if two enrollment types can swap"""
+        if student_type == 'SOLO':
+            return displaced_type == 'SOLO'
+        elif student_type == 'PAIR':
+            return displaced_type == 'PAIR'
+        elif student_type == 'GROUP':
+            return displaced_type in ['GROUP', 'PAIR']
+        return False
+
 
 class SlotFinderEngine:
     """Core engine for finding optimal lesson slots"""
@@ -388,12 +407,19 @@ class SlotFinderEngine:
         return self._rank_recommendations(recommendations)[:max_results]
     
     def _find_direct_placements(self, student: Student) -> List[SlotRecommendation]:
-        """Find groups with available space that student can join directly"""
+        """Find groups with available space that student can join directly - STRICT TYPE MATCHING"""
         recommendations = []
         current_term = Term.get_active_term()
         
         if not current_term:
             return recommendations
+        
+        # Get student's enrollment type
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+            student_enrollment_type = enrollment.enrollment_type
+        except Enrollment.DoesNotExist:
+            return recommendations  # Can't place if no enrollment
         
         # Get student's available time slots
         available_slots = self.availability_checker.get_available_slots(student)
@@ -407,6 +433,10 @@ class SlotFinderEngine:
             ).select_related('coach').prefetch_related('members')
             
             for group in groups_at_time:
+                # Only consider groups of compatible type
+                if not self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type):
+                    continue
+                
                 if group.has_space() and group.is_compatible_with_student(student):
                     # Calculate compatibility score
                     score_info = self.compatibility_scorer.calculate_compatibility_score(
@@ -421,7 +451,8 @@ class SlotFinderEngine:
                             'score_breakdown': score_info['breakdown'],
                             'percentage': score_info['percentage'],
                             'available_spaces': group.get_available_spaces(),
-                            'current_size': group.get_current_size()
+                            'current_size': group.get_current_size(),
+                            'enrollment_type': student_enrollment_type
                         }
                     )
                     recommendations.append(recommendation)
@@ -429,31 +460,53 @@ class SlotFinderEngine:
         return recommendations
     
     def _find_single_swaps(self, student: Student) -> List[SlotRecommendation]:
-        """Find single swap opportunities"""
+        """Find single swap opportunities with strict enrollment type matching"""
         recommendations = []
         current_term = Term.get_active_term()
         
         if not current_term:
             return recommendations
         
+        # Get student's enrollment type
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+            student_enrollment_type = enrollment.enrollment_type
+        except Enrollment.DoesNotExist:
+            return recommendations  # Can't swap if no enrollment
+        
         # Get student's available time slots
         available_slots = self.availability_checker.get_available_slots(student)
         
-        # Look for groups where we could swap with existing students
+        # Look for groups where we could swap with existing students of same type
         for day, time_slot in available_slots:
             groups_at_time = ScheduledGroup.objects.filter(
                 term=current_term,
                 day_of_week=day,
                 time_slot=time_slot
-            ).select_related('coach').prefetch_related('members__student')
+            ).select_related('coach').prefetch_related('members__student__enrollment')
             
             for group in groups_at_time:
+                # Only consider groups of compatible type
+                if not self._is_group_type_compatible(student_enrollment_type, group.group_type):
+                    continue
+                
                 # Check each student in the group for swap potential
                 for member in group.members.all():
                     existing_student = member.student
                     
                     # Skip if it's the same student
                     if existing_student.id == student.id:
+                        continue
+                    
+                    # Get displaced student's enrollment type
+                    try:
+                        displaced_enrollment = existing_student.enrollment_set.get(term=current_term)
+                        displaced_enrollment_type = displaced_enrollment.enrollment_type
+                    except Enrollment.DoesNotExist:
+                        continue  # Skip if no enrollment for displaced student
+                    
+                    # Only swap with same type students (except GROUP can swap with PAIR)
+                    if not self._is_enrollment_type_compatible(student_enrollment_type, displaced_enrollment_type):
                         continue
                     
                     # Check if swapping would benefit both students
@@ -470,7 +523,8 @@ class SlotFinderEngine:
                                 'student_in': student,
                                 'student_out': existing_student,
                                 'group': group,
-                                'benefit_score': swap_benefit['benefit_score']
+                                'benefit_score': swap_benefit['benefit_score'],
+                                'enrollment_type': student_enrollment_type
                             }],
                             benefits=swap_benefit
                         )
@@ -756,12 +810,19 @@ class SwapChainBuilder:
         return sorted(completed_chains, key=lambda x: x.total_benefit, reverse=True)
     
     def _find_initial_swap_opportunities(self, student: Student) -> List[Dict]:
-        """Find initial swap opportunities for the student"""
+        """Find initial swap opportunities for the student with enrollment type compatibility"""
         opportunities = []
         current_term = Term.get_active_term()
         
         if not current_term:
             return opportunities
+        
+        # Get student's enrollment type
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+            student_enrollment_type = enrollment.enrollment_type
+        except Enrollment.DoesNotExist:
+            return opportunities  # Can't swap if no enrollment
         
         # Get student's available time slots
         available_slots = self.engine.availability_checker.get_available_slots(student)
@@ -772,13 +833,28 @@ class SwapChainBuilder:
                 term=current_term,
                 day_of_week=day,
                 time_slot=time_slot
-            ).select_related('coach').prefetch_related('members__student')
+            ).select_related('coach').prefetch_related('members__student__enrollment')
             
             for group in groups_at_time:
+                # Only consider groups of compatible type
+                if not self.engine.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type):
+                    continue
+                
                 for member in group.members.all():
                     existing_student = member.student
                     
                     if existing_student.id == student.id:
+                        continue
+                    
+                    # Get displaced student's enrollment type
+                    try:
+                        displaced_enrollment = existing_student.enrollment_set.get(term=current_term)
+                        displaced_enrollment_type = displaced_enrollment.enrollment_type
+                    except Enrollment.DoesNotExist:
+                        continue  # Skip if no enrollment for displaced student
+                    
+                    # Only swap with compatible enrollment types
+                    if not self.engine.compatibility_scorer._is_enrollment_type_compatible(student_enrollment_type, displaced_enrollment_type):
                         continue
                     
                     # Evaluate swap benefit
@@ -791,7 +867,9 @@ class SwapChainBuilder:
                             'target_student': student,
                             'displaced_student': existing_student,
                             'target_group': group,
-                            'benefit_score': swap_benefit['benefit_score']
+                            'benefit_score': swap_benefit['benefit_score'],
+                            'student_type': student_enrollment_type,
+                            'displaced_type': displaced_enrollment_type
                         })
         
         return sorted(opportunities, key=lambda x: x['benefit_score'], reverse=True)
@@ -804,10 +882,22 @@ class SwapChainBuilder:
         start_time: float,
         max_time_seconds: int
     ) -> bool:
-        """Recursively build a swap chain"""
+        """Recursively build a swap chain with enrollment type compatibility"""
         
         if time.time() - start_time > max_time_seconds:
             return False
+        
+        # Get the student type from the opportunity
+        student_enrollment_type = swap_opportunity.get('student_type')
+        if not student_enrollment_type:
+            # Fallback to getting from student if not provided
+            current_term = Term.get_active_term()
+            if current_term:
+                try:
+                    enrollment = swap_opportunity['target_student'].enrollment_set.get(term=current_term)
+                    student_enrollment_type = enrollment.enrollment_type
+                except Enrollment.DoesNotExist:
+                    return False
         
         # Add the current swap to the chain
         move = SwapMove(
@@ -842,12 +932,28 @@ class SwapChainBuilder:
             else:
                 return False  # Can't complete chain
         
-        # Try to find a placement for the displaced student
+        # Try to find a placement for the displaced student with type compatibility
+        displaced_student = move.displaced_student
+        current_term = Term.get_active_term()
+        if current_term:
+            try:
+                displaced_enrollment = displaced_student.enrollment_set.get(term=current_term)
+                displaced_enrollment_type = displaced_enrollment.enrollment_type
+            except Enrollment.DoesNotExist:
+                return False
+        
         displaced_opportunities = self._find_initial_swap_opportunities(move.displaced_student)
         
         for opportunity in displaced_opportunities[:5]:  # Limit exploration
             if time.time() - start_time > max_time_seconds:
                 break
+            
+            # Check if this opportunity is compatible with the displaced student's type
+            if not self.engine.compatibility_scorer._is_enrollment_type_compatible(
+                displaced_enrollment_type, 
+                opportunity['displaced_type']
+            ):
+                continue
             
             # Create a copy of the chain to explore this branch
             chain_copy = SwapChain(chain.initial_student)
