@@ -541,9 +541,10 @@ def create_note_view(request, record_pk):
 
 @login_required
 def find_better_slot_api(request, student_id):
-    """API endpoint for finding better slots for a student with enhanced error handling"""
+    """Advanced API endpoint using PostgreSQL RPC function for comprehensive slot optimization"""
     import logging
     import time as time_module
+    from django.db import connection
     
     logger = logging.getLogger(__name__)
     
@@ -554,14 +555,13 @@ def find_better_slot_api(request, student_id):
     
     try:
         # First check if student exists with detailed logging
-        logger.info(f"Attempting to find student with ID: {student_id}")
+        logger.info(f"🚀 ADVANCED SLOT FINDER: Starting analysis for student {student_id}")
         
         try:
             student = Student.objects.get(pk=student_id)
             logger.info(f"✅ Found student {student.id} ({student.first_name} {student.last_name})")
         except Student.DoesNotExist:
             logger.error(f"❌ Student with ID {student_id} does not exist")
-            # Let's also check what student IDs actually exist
             existing_ids = list(Student.objects.values_list('id', flat=True).order_by('id')[:10])
             logger.info(f"First 10 existing student IDs: {existing_ids}")
             total_students = Student.objects.count()
@@ -571,100 +571,95 @@ def find_better_slot_api(request, student_id):
                 'error': f'Student ID {student_id} not found. There are {total_students} students in the system.'
             })
         
-        logger.info(f"Starting slot finder analysis for student {student.id} ({student.first_name} {student.last_name})")
-        
-        # Check if there's an active term
-        current_term = Term.get_active_term()
-        if not current_term:
-            return JsonResponse({
-                'success': False, 
-                'error': 'No active term found. Please contact an administrator.'
-            })
-        
-        # Check if student is enrolled in current term
-        try:
-            enrollment = student.enrollment_set.get(term=current_term)
-        except Enrollment.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': f'{student.first_name} is not enrolled in the current term ({current_term.name}). Please contact an administrator.'
-            })
-        
-        # Use the slot finder engine with generous timeout for full analysis
-        engine = EnhancedSlotFinderEngine()
-        
-        try:
-            recommendations = engine.find_optimal_slots(
-                student, 
-                max_results=5,
-                include_chains=True,
-                max_time_seconds=600  # 10 minutes for comprehensive analysis
-            )
-        except Exception as e:
-            logger.error(f"Slot finder engine error for student {student_id}: {str(e)}")
-            return JsonResponse({
-                'success': False,
-                'error': 'Analysis engine encountered an error. The system is working on optimizing your schedule - please try again in a moment.'
-            })
-        
+        # Call the advanced PostgreSQL function
+        with connection.cursor() as cursor:
+            logger.info(f"🔍 Calling PostgreSQL optimization function...")
+            
+            cursor.execute("""
+                SELECT 
+                    slot_id, group_id, group_name, coach_name, day_name, time_slot,
+                    compatibility_score, placement_type, current_size, max_capacity,
+                    displacement_info, explanation, feasibility_score
+                FROM find_optimal_slots_advanced(%s, %s, %s)
+            """, [student_id, 10, True])  # student_id, max_results, include_displacements
+            
+            results = cursor.fetchall()
+            
         analysis_time = time_module.time() - start_time
-        logger.info(f"Slot finder analysis completed for student {student_id} in {analysis_time:.2f} seconds. Found {len(recommendations)} recommendations.")
+        logger.info(f"🎯 PostgreSQL analysis completed in {analysis_time:.2f} seconds. Found {len(results)} recommendations.")
         
-        # Convert recommendations to JSON-serializable format
+        # Convert results to JSON-serializable format
         recommendations_data = []
-        for rec in recommendations:
-            try:
-                # Get day name
-                day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                day_name = day_names[rec.group.day_of_week] if rec.group.day_of_week < len(day_names) else 'Unknown'
-                
-                rec_data = {
-                    'group_name': rec.group.name,
-                    'group_id': rec.group.id,
-                    'score': rec.score,
-                    'percentage': rec.benefits.get('percentage', 0),
-                    'placement_type': rec.placement_type,
-                    'day_name': day_name,
-                    'time_slot': str(rec.group.time_slot),
-                    'coach_name': str(rec.group.coach) if rec.group.coach else 'No Coach',
-                    'current_size': rec.group.get_current_size(),
-                    'max_capacity': rec.group.get_type_based_max_capacity(),
-                    'score_breakdown': rec.benefits.get('score_breakdown', {}),
-                }
-                
-                # Add placement-specific data
-                if rec.placement_type == 'swap' and rec.swap_chain:
-                    swap_info = rec.swap_chain[0] if rec.swap_chain else {}
-                    rec_data['displaced_student'] = str(swap_info.get('student_out', 'Unknown'))
-                elif rec.placement_type == 'chain' and hasattr(rec.swap_chain, 'get_chain_length'):
-                    rec_data['chain_length'] = rec.swap_chain.get_chain_length()
-                
-                recommendations_data.append(rec_data)
-            except Exception as e:
-                logger.warning(f"Error processing recommendation for student {student_id}: {str(e)}")
-                continue  # Skip this recommendation but continue with others
+        for row in results:
+            (slot_id, group_id, group_name, coach_name, day_name, time_slot,
+             compatibility_score, placement_type, current_size, max_capacity,
+             displacement_info, explanation, feasibility_score) = row
+            
+            rec_data = {
+                'group_name': group_name,
+                'group_id': group_id,
+                'score': compatibility_score,
+                'percentage': int((compatibility_score / 370) * 100),  # Convert to percentage
+                'placement_type': placement_type,
+                'day_name': day_name,
+                'time_slot': time_slot,
+                'coach_name': coach_name,
+                'current_size': current_size,
+                'max_capacity': max_capacity,
+                'explanation': explanation,
+                'feasibility_score': feasibility_score,
+                'displacement_info': displacement_info,
+            }
+            
+            # Add placement-specific data from displacement_info
+            if displacement_info:
+                if displacement_info.get('type') == 'displacement':
+                    displaced_students = displacement_info.get('displaced_students', [])
+                    if displaced_students:
+                        rec_data['displaced_students'] = [
+                            f"{s.get('student_name', 'Unknown')} ({s.get('enrollment_type', 'Unknown')})"
+                            for s in displaced_students
+                        ]
+                        rec_data['complexity'] = displacement_info.get('complexity', 1)
+            
+            recommendations_data.append(rec_data)
+        
+        # Categorize recommendations
+        direct_placements = [r for r in recommendations_data if r['placement_type'] == 'direct']
+        displacements = [r for r in recommendations_data if r['placement_type'] == 'displacement']
         
         # Provide helpful message based on results
         if not recommendations_data:
-            message = f"No better slots found for {student.first_name}. Current placement appears optimal!"
+            message = f"No alternative slots found for {student.first_name}. Current placement appears optimal!"
         else:
-            message = f"Found {len(recommendations_data)} better slot option(s) for {student.first_name}"
+            message_parts = []
+            if direct_placements:
+                message_parts.append(f"{len(direct_placements)} direct placement(s)")
+            if displacements:
+                message_parts.append(f"{len(displacements)} displacement option(s)")
+            
+            message = f"Found {' and '.join(message_parts)} for {student.first_name}"
+        
+        logger.info(f"📊 Results: {len(direct_placements)} direct, {len(displacements)} displacement options")
         
         return JsonResponse({
             'success': True,
             'recommendations': recommendations_data,
             'student_name': f"{student.first_name} {student.last_name}",
-            'analysis_time': f"{analysis_time:.1f} seconds",
-            'message': message
+            'analysis_time': f"{analysis_time:.2f} seconds",
+            'message': message,
+            'summary': {
+                'total': len(recommendations_data),
+                'direct_placements': len(direct_placements),
+                'displacements': len(displacements)
+            }
         })
         
-    except Student.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Student not found'})
     except Exception as e:
-        logger.error(f"Unexpected error in find_better_slot_api for student {student_id}: {str(e)}")
+        logger.error(f"💥 Advanced slot finder error for student {student_id}: {str(e)}")
         return JsonResponse({
             'success': False, 
-            'error': 'An unexpected error occurred during analysis. Please try again or contact support if the problem persists.'
+            'error': f'Advanced analysis failed: {str(e)}. Please try again or contact support.'
         })
 
 
