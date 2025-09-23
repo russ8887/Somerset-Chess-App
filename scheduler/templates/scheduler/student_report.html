@@ -416,8 +416,11 @@
         // Show loading state
         const button = event.target;
         const originalText = button.innerHTML;
-        button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Analyzing...';
+        button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Deep Analysis Running... (up to 10 minutes)';
         button.disabled = true;
+        
+        // Show additional progress message
+        showNotification('Starting comprehensive slot analysis. This may take up to 10 minutes for the best results.', 'info');
         
         // Make AJAX request to find better slots
         fetch(`/api/find-better-slot/${studentId}/`, {

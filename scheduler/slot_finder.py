@@ -54,6 +54,7 @@ class AvailabilityChecker:
         """
         Get all available time slots for a student.
         Returns list of (day_of_week, time_slot) tuples.
+        Optimized with bulk queries to reduce database hits.
         """
         self._clear_cache_if_needed()
         
@@ -62,12 +63,31 @@ class AvailabilityChecker:
             return self._cache[cache_key]
         
         available_slots = []
-        time_slots = TimeSlot.objects.all()
         
+        # Bulk fetch all time slots once
+        time_slots = list(TimeSlot.objects.all())
+        
+        # Bulk fetch all unavailabilities for this student to reduce queries
+        individual_unavailabilities = set(
+            ScheduledUnavailability.objects.filter(students=student)
+            .values_list('day_of_week', 'time_slot_id')
+        )
+        
+        class_unavailabilities = set()
+        if student.school_class:
+            class_unavailabilities = set(
+                ScheduledUnavailability.objects.filter(school_classes=student.school_class)
+                .values_list('day_of_week', 'time_slot_id')
+            )
+        
+        # Check availability for each day/time combination
         for day in range(5):  # Monday to Friday
             for time_slot in time_slots:
-                conflict_info = student.has_scheduling_conflict(day, time_slot)
-                if not conflict_info['has_conflict']:
+                # Quick check against pre-fetched unavailabilities
+                has_individual_conflict = (day, time_slot.id) in individual_unavailabilities
+                has_class_conflict = (day, time_slot.id) in class_unavailabilities
+                
+                if not has_individual_conflict and not has_class_conflict:
                     available_slots.append((day, time_slot))
         
         self._cache[cache_key] = available_slots

@@ -546,13 +546,13 @@ def find_better_slot_api(request, student_id):
     try:
         student = get_object_or_404(Student, pk=student_id)
         
-        # Use the slot finder engine
+        # Use the slot finder engine with generous timeout for full analysis
         engine = EnhancedSlotFinderEngine()
         recommendations = engine.find_optimal_slots(
             student, 
             max_results=5,
             include_chains=True,
-            max_time_seconds=30
+            max_time_seconds=600  # 10 minutes for comprehensive analysis
         )
         
         # Convert recommendations to JSON-serializable format
