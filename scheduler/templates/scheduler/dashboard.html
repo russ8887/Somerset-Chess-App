@@ -44,7 +44,7 @@
             <div class="mb-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div>
-                        <h3 class="mb-1">{% if term_week_display %}{{ term_week_display }}{% endif %}</h3>
+                        {% if term_week_display %}<h3 class="mb-1">{{ term_week_display }}</h3>{% endif %}
                         <h4 class="text-muted mb-0">{{ view_date|date:"l, F jS Y" }}</h4>
                     </div>
                     <div class="text-end">

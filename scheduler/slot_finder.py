@@ -487,7 +487,7 @@ class SlotFinderEngine:
             
             for group in groups_at_time:
                 # Only consider groups of compatible type
-                if not self._is_group_type_compatible(student_enrollment_type, group.group_type):
+                if not self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type):
                     continue
                 
                 # Check each student in the group for swap potential
