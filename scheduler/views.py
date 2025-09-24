@@ -571,17 +571,48 @@ def find_better_slot_api(request, student_id):
                 'error': f'Student ID {student_id} not found. There are {total_students} students in the system.'
             })
         
+        # Get the active term for this student
+        try:
+            # First try to get the student's current enrollment term
+            current_enrollment = student.enrollment_set.select_related('term').filter(
+                term__start_date__lte=date.today(),
+                term__end_date__gte=date.today()
+            ).first()
+            
+            if current_enrollment:
+                active_term_id = current_enrollment.term.id
+                logger.info(f"📅 Using student's active enrollment term: {current_enrollment.term.name} (ID: {active_term_id})")
+            else:
+                # Fallback to system active term
+                from .models import Term
+                active_term = Term.get_active_term()
+                if active_term:
+                    active_term_id = active_term.id
+                    logger.info(f"📅 Using system active term: {active_term.name} (ID: {active_term_id})")
+                else:
+                    logger.error("❌ No active term found")
+                    return JsonResponse({
+                        'success': False, 
+                        'error': 'No active term found. Please contact an administrator.'
+                    })
+        except Exception as e:
+            logger.error(f"❌ Error determining active term: {str(e)}")
+            return JsonResponse({
+                'success': False, 
+                'error': f'Could not determine active term: {str(e)}'
+            })
+
         # Call the advanced PostgreSQL function
         with connection.cursor() as cursor:
-            logger.info(f"🔍 Calling PostgreSQL optimization function...")
+            logger.info(f"🔍 Calling PostgreSQL optimization function with student_id={student_id}, term_id={active_term_id}...")
             
             cursor.execute("""
                 SELECT 
                     slot_id, group_id, group_name, coach_name, day_name, time_slot,
                     compatibility_score, placement_type, current_size, max_capacity,
                     displacement_info, explanation, feasibility_score
-                FROM find_optimal_slots_advanced(%s, %s, %s)
-            """, [student_id, 10, True])  # student_id, max_results, include_displacements
+                FROM find_optimal_slots_advanced(%s, %s, %s, %s)
+            """, [student_id, active_term_id, True, 10])  # student_id, term_id, include_displacements, max_results
             
             results = cursor.fetchall()
             
