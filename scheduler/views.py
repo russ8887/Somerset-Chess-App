@@ -193,9 +193,14 @@ class DashboardView(LoginRequiredMixin, ListView):
             'next_day': view_date + timedelta(days=1), 'today_date': date.today(),
             'view_coach': view_coach,
         })
+        
+        # FIXED: Always provide term_week_display to prevent template crashes
         current_term = Term.objects.filter(start_date__lte=view_date, end_date__gte=view_date).first()
         if current_term:
             context['term_week_display'] = f"{current_term.name}, Week {(view_date - current_term.start_date).days // 7 + 1}"
+        else:
+            # Provide fallback when viewing dates outside any term
+            context['term_week_display'] = f"No term active for {view_date.strftime('%B %d, %Y')}"
         
         # --- Missed Lessons Notification ---
         # Find lessons with PENDING status that need attention

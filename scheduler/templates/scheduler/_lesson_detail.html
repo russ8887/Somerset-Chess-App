@@ -77,15 +77,20 @@
                     {% endif %}
 
                     {# --- Notes Button Logic --- #}
-                    {% if record.lessonnote %}
-                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'edit-note' record.lessonnote.pk %}">
-                            <i class="bi bi-journal-text me-1"></i>Notes
-                        </button>
-                    {% else %}
-                        <button class="btn btn-sm btn-outline-primary ms-auto" hx-get="{% url 'create-note' record.pk %}">
-                            <i class="bi bi-plus-circle me-1"></i>Add Note
-                        </button>
-                    {% endif %}
+                                    {% if record.lessonnote %}
+                                        <div class="lesson-note-display">
+                                            <small class="text-muted">
+                                                <strong>Understanding:</strong> {{ record.lessonnote.get_student_understanding_display|default:"Not recorded" }}<br>
+                                                <strong>Topics:</strong> {{ record.lessonnote.topics_covered|default:"None recorded" }}<br>
+                                                <strong>Notes:</strong> {{ record.lessonnote.coach_comments|default:"No notes" }}
+                                            </small>
+                                        </div>
+                                    {% else %}
+                                        <!-- FIXED: Handle missing lesson notes gracefully -->
+                                        <div class="lesson-note-placeholder">
+                                            <small class="text-muted">No lesson notes recorded</small>
+                                        </div>
+                                    {% endif %}
                 </div>
 
                 {# Note editing form removed - editing_note_id variable not passed from view #}

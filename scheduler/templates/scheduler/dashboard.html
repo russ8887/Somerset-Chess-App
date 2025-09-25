@@ -134,17 +134,18 @@
     </form>
 
 <script>
-// Auto-refresh dashboard after student moves
+// ENHANCED Auto-refresh dashboard after student moves
 function refreshDashboard() {
-    // Reload the current page to show updated rosters
-    window.location.reload();
+    console.log('Refreshing dashboard to show updated rosters...');
+    // Force reload to ensure fresh data
+    window.location.reload(true);
 }
 
 // Listen for successful student moves from other windows/tabs
 window.addEventListener('storage', function(e) {
     if (e.key === 'student_moved' && e.newValue) {
-        console.log('Student move detected, refreshing dashboard...');
-        setTimeout(refreshDashboard, 1000); // Small delay to ensure database is updated
+        console.log('Student move detected via localStorage, refreshing dashboard...');
+        setTimeout(refreshDashboard, 500); // Reduced delay for faster updates
         localStorage.removeItem('student_moved'); // Clean up
     }
 });
@@ -152,19 +153,42 @@ window.addEventListener('storage', function(e) {
 // Listen for messages from student report windows
 window.addEventListener('message', function(event) {
     if (event.data && event.data.type === 'student_moved') {
-        console.log('Student move message received, refreshing dashboard...');
-        setTimeout(refreshDashboard, 1000);
+        console.log('Student move message received via postMessage, refreshing dashboard...');
+        setTimeout(refreshDashboard, 500);
     }
 });
 
-// Periodically check for roster changes (every 30 seconds)
+// ENHANCED: Listen for successful AJAX responses that indicate moves
+document.addEventListener('DOMContentLoaded', function() {
+    // Monitor for successful move responses
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+        return originalFetch.apply(this, args).then(response => {
+            // Check if this was a move API call
+            if (args[0] && args[0].includes('/api/execute-slot-move/')) {
+                response.clone().json().then(data => {
+                    if (data.success) {
+                        console.log('Move API success detected, triggering refresh...');
+                        // Notify other windows
+                        localStorage.setItem('student_moved', Date.now().toString());
+                        // Refresh this window
+                        setTimeout(refreshDashboard, 1000);
+                    }
+                }).catch(() => {}); // Ignore JSON parse errors
+            }
+            return response;
+        });
+    };
+});
+
+// Periodically check for roster changes (every 45 seconds)
 setInterval(function() {
     // Only refresh if the page has been idle for a while to avoid interrupting user
-    if (document.hidden === false && Date.now() - window.lastUserActivity > 30000) {
+    if (document.hidden === false && Date.now() - window.lastUserActivity > 45000) {
         console.log('Periodic roster refresh...');
         refreshDashboard();
     }
-}, 30000);
+}, 45000);
 
 // Track user activity
 window.lastUserActivity = Date.now();
@@ -174,7 +198,10 @@ document.addEventListener('click', function() {
 document.addEventListener('keypress', function() {
     window.lastUserActivity = Date.now();
 });
+document.addEventListener('scroll', function() {
+    window.lastUserActivity = Date.now();
+});
 
-console.log('Dashboard auto-refresh system loaded');
+console.log('Enhanced dashboard auto-refresh system loaded');
 </script>
 {% endblock %}
