@@ -546,7 +546,10 @@ class SlotFinderEngine:
         return recommendations
     
     def _find_single_swaps(self, student: Student) -> List[SlotRecommendation]:
-        """Find single swap opportunities with strict enrollment type matching"""
+        """Find single swap opportunities with AGGRESSIVE displacement from full groups"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         recommendations = []
         current_term = Term.get_active_term()
         
@@ -559,6 +562,8 @@ class SlotFinderEngine:
             student_enrollment_type = enrollment.enrollment_type
         except Enrollment.DoesNotExist:
             return recommendations  # Can't swap if no enrollment
+        
+        logger.info(f"🔄 AGGRESSIVE SWAP SEARCH for {student.first_name} ({student_enrollment_type})")
         
         # Get student's available time slots
         available_slots = self.availability_checker.get_available_slots(student)
@@ -576,7 +581,82 @@ class SlotFinderEngine:
                 if not self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type):
                     continue
                 
-                # Check each student in the group for swap potential
+                # AGGRESSIVE: Force displacement from full compatible groups
+                effective_group_type = self._get_effective_group_type(group, current_term)
+                current_size = group.get_current_size()
+                
+                logger.info(f"   🎯 Targeting {group.name} ({effective_group_type}, {current_size} students)")
+                
+                # For PAIR students targeting PAIR_FULL groups - FORCE displacement
+                if (student_enrollment_type == 'PAIR' and 
+                    effective_group_type == 'PAIR_FULL' and 
+                    current_size == 2):
+                    
+                    logger.info(f"   💥 FORCING displacement from PAIR_FULL group")
+                    
+                    # Find the weaker fit of the 2 current students
+                    current_students = []
+                    for member in group.members.all():
+                        existing_student = member.student
+                        if existing_student.id != student.id:
+                            score = self.compatibility_scorer.calculate_compatibility_score(
+                                existing_student, group, group.coach
+                            )
+                            current_students.append((existing_student, score['total_score']))
+                    
+                    if len(current_students) >= 1:
+                        # Sort by score - displace the weakest fit
+                        current_students.sort(key=lambda x: x[1])
+                        weakest_student, weakest_score = current_students[0]
+                        
+                        logger.info(f"   👤 Weakest fit: {weakest_student.first_name} (score: {weakest_score})")
+                        
+                        # Calculate new student's score
+                        new_student_score = self.compatibility_scorer.calculate_compatibility_score(
+                            student, group, group.coach
+                        )
+                        
+                        logger.info(f"   🆚 New student score: {new_student_score['total_score']} vs {weakest_score}")
+                        
+                        # AGGRESSIVE: Allow displacement even if only slightly better
+                        if new_student_score['total_score'] >= weakest_score - 20:  # Very lenient
+                            
+                            # Check if displaced student has alternatives
+                            displaced_alternatives = self._find_direct_placements(weakest_student)
+                            
+                            logger.info(f"   🔍 Displaced student has {len(displaced_alternatives)} alternatives")
+                            
+                            # AGGRESSIVE: Create displacement even with limited alternatives
+                            if len(displaced_alternatives) > 0:
+                                best_alternative = max(displaced_alternatives, key=lambda x: x.score)
+                                
+                                recommendation = SlotRecommendation(
+                                    group=group,
+                                    score=new_student_score['total_score'],
+                                    placement_type='aggressive_displacement',
+                                    swap_chain=[{
+                                        'student_in': student,
+                                        'student_out': weakest_student,
+                                        'group': group,
+                                        'benefit_score': new_student_score['total_score'] - weakest_score,
+                                        'enrollment_type': student_enrollment_type,
+                                        'displacement_reason': f'Forced displacement from PAIR_FULL group',
+                                        'alternative_placement': best_alternative.group.name,
+                                        'alternative_score': best_alternative.score
+                                    }],
+                                    benefits={
+                                        'displacement_type': 'AGGRESSIVE_PAIR_FULL',
+                                        'new_student_score': new_student_score['total_score'],
+                                        'displaced_student_score': weakest_score,
+                                        'benefit_score': new_student_score['total_score'] - weakest_score,
+                                        'displaced_alternatives': len(displaced_alternatives),
+                                        'best_alternative_score': best_alternative.score
+                                    }
+                                )
+                                recommendations.append(recommendation)
+                                logger.info(f"   ✅ AGGRESSIVE DISPLACEMENT CREATED!")
+                
+                # Also check regular swaps for non-full groups
                 for member in group.members.all():
                     existing_student = member.student
                     
@@ -592,7 +672,7 @@ class SlotFinderEngine:
                         continue  # Skip if no enrollment for displaced student
                     
                     # Only swap with same type students (except GROUP can swap with PAIR)
-                    if not self._is_enrollment_type_compatible(student_enrollment_type, displaced_enrollment_type):
+                    if not self.compatibility_scorer._is_enrollment_type_compatible(student_enrollment_type, displaced_enrollment_type):
                         continue
                     
                     # Check if swapping would benefit both students
@@ -616,6 +696,7 @@ class SlotFinderEngine:
                         )
                         recommendations.append(recommendation)
         
+        logger.info(f"🔄 AGGRESSIVE SWAP SEARCH found {len(recommendations)} displacement options")
         return recommendations
     
     def _evaluate_swap_benefit(
@@ -646,10 +727,10 @@ class SlotFinderEngine:
         benefit_score = potential_score['total_score'] - current_score['total_score']
         best_alternative = max(existing_alternatives, key=lambda x: x.score)
         
-        # LOWERED THRESHOLD: Show more options including lateral moves
+        # AGGRESSIVE DISPLACEMENT: Allow almost any swap that doesn't make things much worse
         beneficial = (
-            benefit_score >= -5 and  # Allow slight downgrades for variety
-            best_alternative.score >= current_score['total_score'] - 15  # More flexible for displaced student
+            benefit_score >= -50 and  # Allow major downgrades for displacement opportunities
+            best_alternative.score >= current_score['total_score'] - 50  # Very flexible for displaced student
         )
         
         return {
@@ -920,9 +1001,9 @@ class SwapChainBuilder:
     
     def __init__(self, slot_finder_engine: 'SlotFinderEngine'):
         self.engine = slot_finder_engine
-        self.max_chain_depth = 4
-        self.max_chains_to_explore = 50
-        self.min_benefit_threshold = 30
+        self.max_chain_depth = 20  # EXTENDED: Allow up to 20 moves in a chain
+        self.max_chains_to_explore = 100  # More chains to explore
+        self.min_benefit_threshold = -10  # AGGRESSIVE: Allow negative benefit chains
     
     def find_swap_chains(
         self, 

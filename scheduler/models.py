@@ -362,12 +362,17 @@ class ScheduledGroup(models.Model):
             return False
         
         # Get the dynamic group type based on current members
-        from .slot_finder import SlotFinder
-        slot_finder = SlotFinder()
-        current_term = Term.get_active_term()
-        
-        if current_term:
-            dynamic_type = slot_finder.get_dynamic_group_type(self, current_term)
+        try:
+            from .slot_finder import EnhancedSlotFinderEngine
+            slot_finder = EnhancedSlotFinderEngine()
+            current_term = Term.get_active_term()
+            
+            if current_term:
+                dynamic_type = slot_finder._get_effective_group_type(self, current_term)
+            else:
+                dynamic_type = 'UNKNOWN'
+        except ImportError:
+            dynamic_type = 'UNKNOWN'
             
             # For PAIR_WAITING groups, be more flexible with PAIR students
             if dynamic_type == 'PAIR_WAITING' and student_enrollment_type == 'PAIR':
