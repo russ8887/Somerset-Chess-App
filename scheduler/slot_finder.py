@@ -374,6 +374,40 @@ class SlotFinderEngine:
         self.compatibility_scorer = CompatibilityScorer()
         self._optimization_cache = {}
     
+    def get_dynamic_group_type(self, group: ScheduledGroup, current_term: Term) -> str:
+        """Determine the dynamic group type based on current students enrolled"""
+        current_members = group.members.filter(term=current_term)
+        member_count = current_members.count()
+        
+        if member_count == 0:
+            return 'EMPTY'
+        
+        # Get enrollment types of current members
+        enrollment_types = set(
+            current_members.values_list('enrollment_type', flat=True)
+        )
+        
+        # Determine effective type based on current composition
+        if len(enrollment_types) == 1:
+            # All students have same enrollment type
+            single_type = list(enrollment_types)[0]
+            if single_type == 'PAIR':
+                if member_count == 1:
+                    return 'PAIR_WAITING'  # 1 PAIR student waiting for partner
+                elif member_count == 2:
+                    return 'PAIR_FULL'     # 2 PAIR students, full
+                else:
+                    return 'PAIR_INVALID'  # More than 2 PAIR students (shouldn't happen)
+            elif single_type == 'SOLO':
+                return 'SOLO_OCCUPIED' if member_count == 1 else 'SOLO_INVALID'
+            elif single_type == 'GROUP':
+                return 'GROUP'
+        else:
+            # Mixed enrollment types
+            return 'MIXED'
+        
+        return 'UNKNOWN'
+    
     def find_optimal_slots(
         self, 
         student: Student, 
@@ -470,7 +504,7 @@ class SlotFinderEngine:
                 logger.info(f"   ✅ Type compatible: {student_enrollment_type} can join {effective_group_type} group")
                 
                 has_space = group.has_space()
-                is_compatible = group.is_compatible_with_student(student)
+                is_compatible = group.is_compatible_with_student(student, student_enrollment_type)
                 
                 logger.info(f"   📊 Has space: {has_space}, Is compatible: {is_compatible}")
                 
@@ -1241,7 +1275,7 @@ class EnhancedSlotFinderEngine(SlotFinderEngine):
                     continue
                 
                 # Include groups with space OR groups where student could swap
-                if group.has_space() and group.is_compatible_with_student(student):
+                if group.has_space() and group.is_compatible_with_student(student, student_enrollment_type):
                     # Calculate compatibility score
                     score_info = self.compatibility_scorer.calculate_compatibility_score(
                         student, group, group.coach

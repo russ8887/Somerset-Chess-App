@@ -940,7 +940,17 @@ def execute_slot_move_api(request, student_id):
             
             # Check if displaced student can fit in original student's groups
             for group in student_current_groups:
-                if not group.is_compatible_with_student(displaced_student):
+                # Get displaced student's enrollment type
+                try:
+                    displaced_enrollment = displaced_student.enrollment_set.get(term=current_term)
+                    displaced_enrollment_type = displaced_enrollment.enrollment_type
+                except Enrollment.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Displaced student {displaced_student.first_name} {displaced_student.last_name} not enrolled in current term'
+                    })
+                
+                if not group.is_compatible_with_student(displaced_student, displaced_enrollment_type):
                     return JsonResponse({
                         'success': False, 
                         'error': f'Displaced student is not compatible with group {group.name}'

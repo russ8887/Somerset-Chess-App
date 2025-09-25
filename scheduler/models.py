@@ -355,19 +355,43 @@ class ScheduledGroup(models.Model):
             distribution[skill] = distribution.get(skill, 0) + 1
         return distribution
     
-    def is_compatible_with_student(self, student):
+    def is_compatible_with_student(self, student, student_enrollment_type=None):
         """Check if student would be compatible with this group"""
-        # Check skill level compatibility
+        # Check if group has space first (most important)
+        if not self.has_space():
+            return False
+        
+        # Get the dynamic group type based on current members
+        from .slot_finder import SlotFinder
+        slot_finder = SlotFinder()
+        current_term = Term.get_active_term()
+        
+        if current_term:
+            dynamic_type = slot_finder.get_dynamic_group_type(self, current_term)
+            
+            # For PAIR_WAITING groups, be more flexible with PAIR students
+            if dynamic_type == 'PAIR_WAITING' and student_enrollment_type == 'PAIR':
+                # PAIR students can join PAIR_WAITING groups with relaxed rules
+                # Only check if skill levels are within 2 levels (more flexible)
+                skill_diff = abs(ord(student.skill_level) - ord(self.target_skill_level))
+                if skill_diff > 2:  # Allow B->I, I->A, but not B->A
+                    return False
+                
+                # More flexible year level check for PAIR students (within 3 years)
+                avg_year = self.get_average_year_level()
+                if avg_year > 0 and abs(student.year_level - avg_year) > 3:
+                    return False
+                
+                return True
+        
+        # Standard compatibility checks for other cases
+        # Check skill level compatibility (within 1 level)
         if abs(ord(student.skill_level) - ord(self.target_skill_level)) > 1:
             return False
         
         # Check year level compatibility (within 2 years)
         avg_year = self.get_average_year_level()
         if avg_year > 0 and abs(student.year_level - avg_year) > 2:
-            return False
-        
-        # Check if group has space
-        if not self.has_space():
             return False
         
         return True
