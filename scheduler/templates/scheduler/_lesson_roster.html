@@ -10,9 +10,13 @@
             <span id="status-{{ record.pk }}" style="display: inline-block;">
                 {% include "scheduler/_attendance_status.html" %}
             </span>
-            <span id="note-{{ record.lessonnote.pk }}" style="display: inline-block; margin-left: 1em;">
-                {% include "scheduler/_lesson_note_display.html" with note=record.lessonnote %}
-            </span>
+            {% with lesson_note=record.lessonnote|default:None %}
+                {% if lesson_note %}
+                    <span id="note-{{ lesson_note.pk }}" style="display: inline-block; margin-left: 1em;">
+                        {% include "scheduler/_lesson_note_display.html" with note=lesson_note %}
+                    </span>
+                {% endif %}
+            {% endwith %}
         </li>
     {% endfor %}
 </ul>
