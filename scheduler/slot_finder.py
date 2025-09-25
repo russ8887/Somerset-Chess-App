@@ -407,7 +407,7 @@ class SlotFinderEngine:
         return self._rank_recommendations(recommendations)[:max_results]
     
     def _find_direct_placements(self, student: Student) -> List[SlotRecommendation]:
-        """Find groups with available space that student can join directly - STRICT TYPE MATCHING"""
+        """Find groups with available space that student can join directly - DYNAMIC TYPE MATCHING"""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -444,23 +444,30 @@ class SlotFinderEngine:
                 term=current_term,
                 day_of_week=day,
                 time_slot=time_slot
-            ).select_related('coach').prefetch_related('members')
+            ).select_related('coach').prefetch_related('members__student')
             
             groups_count = groups_at_time.count()
             total_groups_checked += groups_count
             logger.info(f"📍 {day_name} {time_slot}: Found {groups_count} groups")
             
             for group in groups_at_time:
-                logger.info(f"   🔍 Checking group: {group.name} (type: {group.group_type}, size: {group.get_current_size()}/{group.max_capacity})")
+                # DYNAMIC GROUP TYPE DETECTION - Look at actual students in group
+                effective_group_type = self._get_effective_group_type(group, current_term)
+                current_size = group.get_current_size()
                 
-                # Only consider groups of compatible type
-                is_type_compatible = self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type)
+                logger.info(f"   🔍 Checking group: {group.name} (effective type: {effective_group_type}, size: {current_size}/{group.max_capacity})")
+                
+                # Check compatibility based on EFFECTIVE type, not static type
+                is_type_compatible = self._is_student_compatible_with_effective_group_type(
+                    student_enrollment_type, effective_group_type, current_size
+                )
+                
                 if not is_type_compatible:
-                    logger.info(f"   ❌ Type incompatible: {student_enrollment_type} ≠ {group.group_type}")
+                    logger.info(f"   ❌ Type incompatible: {student_enrollment_type} cannot join {effective_group_type} group with {current_size} students")
                     continue
                 
                 compatible_groups_found += 1
-                logger.info(f"   ✅ Type compatible: {student_enrollment_type} = {group.group_type}")
+                logger.info(f"   ✅ Type compatible: {student_enrollment_type} can join {effective_group_type} group")
                 
                 has_space = group.has_space()
                 is_compatible = group.is_compatible_with_student(student)
@@ -485,7 +492,8 @@ class SlotFinderEngine:
                             'percentage': score_info['percentage'],
                             'available_spaces': group.get_available_spaces(),
                             'current_size': group.get_current_size(),
-                            'enrollment_type': student_enrollment_type
+                            'enrollment_type': student_enrollment_type,
+                            'effective_group_type': effective_group_type
                         }
                     )
                     recommendations.append(recommendation)
@@ -619,6 +627,67 @@ class SlotFinderEngine:
             'displaced_student_alternatives': len(existing_alternatives),
             'best_alternative_score': best_alternative.score if existing_alternatives else 0
         }
+    
+    def _get_effective_group_type(self, group: ScheduledGroup, current_term: Term) -> str:
+        """Determine the effective group type based on current students enrolled"""
+        current_members = group.members.filter(term=current_term)
+        member_count = current_members.count()
+        
+        if member_count == 0:
+            return 'EMPTY'
+        
+        # Get enrollment types of current members
+        enrollment_types = set(
+            current_members.values_list('enrollment_type', flat=True)
+        )
+        
+        # Determine effective type based on current composition
+        if len(enrollment_types) == 1:
+            # All students have same enrollment type
+            single_type = list(enrollment_types)[0]
+            if single_type == 'PAIR':
+                if member_count == 1:
+                    return 'PAIR_WAITING'  # 1 PAIR student waiting for partner
+                elif member_count == 2:
+                    return 'PAIR_FULL'     # 2 PAIR students, full
+                else:
+                    return 'PAIR_INVALID'  # More than 2 PAIR students (shouldn't happen)
+            elif single_type == 'SOLO':
+                return 'SOLO_OCCUPIED' if member_count == 1 else 'SOLO_INVALID'
+            elif single_type == 'GROUP':
+                return 'GROUP'
+        else:
+            # Mixed enrollment types
+            return 'MIXED'
+        
+        return 'UNKNOWN'
+    
+    def _is_student_compatible_with_effective_group_type(
+        self, 
+        student_enrollment_type: str, 
+        effective_group_type: str, 
+        current_size: int
+    ) -> bool:
+        """Check if student can join group based on effective type and current size"""
+        
+        if student_enrollment_type == 'SOLO':
+            # SOLO students can only join empty groups
+            return effective_group_type == 'EMPTY'
+        
+        elif student_enrollment_type == 'PAIR':
+            # PAIR students can only join:
+            # 1. Empty groups (will become PAIR group)
+            # 2. Groups with exactly 1 PAIR student waiting
+            return effective_group_type in ['EMPTY', 'PAIR_WAITING']
+        
+        elif student_enrollment_type == 'GROUP':
+            # GROUP students can join:
+            # 1. Empty groups
+            # 2. Other GROUP groups with space
+            # 3. PAIR groups with 1 student (making it a mixed group)
+            return effective_group_type in ['EMPTY', 'GROUP', 'PAIR_WAITING']
+        
+        return False
     
     def _rank_recommendations(self, recommendations: List[SlotRecommendation]) -> List[SlotRecommendation]:
         """Rank recommendations by score and other factors"""
