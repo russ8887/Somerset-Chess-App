@@ -123,15 +123,11 @@ class DashboardView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        for lesson in context['lessons']:
-            expected_enrollments = lesson.scheduled_group.members.all()
-            existing_enrollments = {rec.enrollment for rec in lesson.attendancerecord_set.all()}
-            missing_enrollments = [en for en in expected_enrollments if en not in existing_enrollments]
-            if missing_enrollments:
-                records_to_create = [AttendanceRecord(lesson_session=lesson, enrollment=en) for en in missing_enrollments]
-                AttendanceRecord.objects.bulk_create(records_to_create)
-                # Refresh the lesson's attendance records from database
-                lesson._attendance_records_cache = None
+        # FIXED: Removed problematic attendance record creation logic that was causing
+        # students to appear in wrong lessons. The self-healing logic in get_queryset()
+        # already handles creating LessonSession objects, and AttendanceRecord objects
+        # should only be created when students actually attend lessons, not automatically
+        # for all group members.
 
         # --- OneOffEvent Auto-Absence Logic ---
         view_date = self.get_date()
