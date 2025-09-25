@@ -523,7 +523,7 @@ class LessonSession(models.Model):
     status = models.CharField(max_length=10, choices=Status.choices, default='SCHEDULED')
 
     def get_attendance_records(self):
-        return self.attendancerecord_set.select_related('enrollment__student__school_class', 'lessonnote').all()
+        return self.attendancerecord_set.select_related('enrollment__student__school_class').prefetch_related('lessonnote').all()
 
     def __str__(self):
         return f"{self.scheduled_group.name} on {self.lesson_date}"

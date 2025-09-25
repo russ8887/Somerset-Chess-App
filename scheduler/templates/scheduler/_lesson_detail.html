@@ -93,7 +93,33 @@
                     {% endwith %}
                 </div>
 
-                {# Note editing form removed - editing_note_id variable not passed from view #}
+                {# Note editing form - show when editing_note_id matches this record's note #}
+                {% if editing_note_id and lesson_note and lesson_note.pk == editing_note_id %}
+                    <div class="mt-3 p-3 bg-light border rounded">
+                        <h6>Edit Note for {{ record.enrollment.student }}</h6>
+                        {% if note_form %}
+                            <form hx-post="{% url 'edit-note' lesson_note.pk %}" hx-target="#lesson-{{ lesson.pk }}">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label for="{{ note_form.student_understanding.id_for_label }}" class="form-label">Student Understanding:</label>
+                                    {{ note_form.student_understanding }}
+                                </div>
+                                <div class="mb-3">
+                                    <label for="{{ note_form.topics_covered.id_for_label }}" class="form-label">Topics Covered:</label>
+                                    {{ note_form.topics_covered }}
+                                </div>
+                                <div class="mb-3">
+                                    <label for="{{ note_form.coach_comments.id_for_label }}" class="form-label">Coach Comments:</label>
+                                    {{ note_form.coach_comments }}
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" class="btn btn-primary btn-sm">Save Note</button>
+                                    <button type="button" class="btn btn-secondary btn-sm" hx-get="{% url 'view-note' lesson_note.pk %}" hx-target="#lesson-{{ lesson.pk }}">Cancel</button>
+                                </div>
+                            </form>
+                        {% endif %}
+                    </div>
+                {% endif %}
             </li>
             {% empty %}
             <li class="list-group-item text-muted">
