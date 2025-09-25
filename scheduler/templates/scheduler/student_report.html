@@ -706,6 +706,22 @@ function executeSlotMove(rec, index) {
                 }
             });
             
+            // Notify other windows/tabs about the move
+            localStorage.setItem('student_moved', JSON.stringify({
+                timestamp: Date.now(),
+                student_id: '{{ student.id }}',
+                message: data.message
+            }));
+            
+            // Send message to parent window if this is opened in a popup
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: 'student_moved',
+                    student_id: '{{ student.id }}',
+                    message: data.message
+                }, '*');
+            }
+            
             // Refresh the page after a short delay to show updated information
             setTimeout(() => {
                 window.location.reload();

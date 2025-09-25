@@ -44,7 +44,11 @@
             <div class="mb-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div>
-                        {% if term_week_display %}<h3 class="mb-1">{{ term_week_display }}</h3>{% endif %}
+                        {% if term_week_display %}
+                            <h3 class="mb-1">{{ term_week_display }}</h3>
+                        {% else %}
+                            <h3 class="mb-1">Daily Schedule</h3>
+                        {% endif %}
                         <h4 class="text-muted mb-0">{{ view_date|date:"l, F jS Y" }}</h4>
                     </div>
                     <div class="text-end">
@@ -128,4 +132,49 @@
     <form method="post" action="{% url 'logout' %}">
         <button type="submit">Logout</button>
     </form>
+
+<script>
+// Auto-refresh dashboard after student moves
+function refreshDashboard() {
+    // Reload the current page to show updated rosters
+    window.location.reload();
+}
+
+// Listen for successful student moves from other windows/tabs
+window.addEventListener('storage', function(e) {
+    if (e.key === 'student_moved' && e.newValue) {
+        console.log('Student move detected, refreshing dashboard...');
+        setTimeout(refreshDashboard, 1000); // Small delay to ensure database is updated
+        localStorage.removeItem('student_moved'); // Clean up
+    }
+});
+
+// Listen for messages from student report windows
+window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'student_moved') {
+        console.log('Student move message received, refreshing dashboard...');
+        setTimeout(refreshDashboard, 1000);
+    }
+});
+
+// Periodically check for roster changes (every 30 seconds)
+setInterval(function() {
+    // Only refresh if the page has been idle for a while to avoid interrupting user
+    if (document.hidden === false && Date.now() - window.lastUserActivity > 30000) {
+        console.log('Periodic roster refresh...');
+        refreshDashboard();
+    }
+}, 30000);
+
+// Track user activity
+window.lastUserActivity = Date.now();
+document.addEventListener('click', function() {
+    window.lastUserActivity = Date.now();
+});
+document.addEventListener('keypress', function() {
+    window.lastUserActivity = Date.now();
+});
+
+console.log('Dashboard auto-refresh system loaded');
+</script>
 {% endblock %}
