@@ -478,7 +478,7 @@ function findBetterSlot(studentId) {
     });
 }
 
-// Show slot recommendations modal with enhanced chain messaging
+// Show slot recommendations modal with enhanced pairing details
 function showSlotRecommendations(recommendations, studentName) {
     if (recommendations.length === 0) {
         showInfo('No alternative slots found at this time. Current placement appears optimal!');
@@ -504,7 +504,7 @@ function showSlotRecommendations(recommendations, studentName) {
     
     // Create modal content
     let modalContent = '<div class="modal fade" id="slotRecommendationsModal" tabindex="-1">' +
-        '<div class="modal-dialog modal-lg">' +
+        '<div class="modal-dialog modal-xl">' +
         '<div class="modal-content">' +
         '<div class="modal-header ' + headerClass + ' text-white">' +
         '<h5 class="modal-title">' +
@@ -517,14 +517,30 @@ function showSlotRecommendations(recommendations, studentName) {
     
     recommendations.forEach((rec, index) => {
         const badgeClass = rec.placement_type === 'direct' ? 'bg-success' : 
-                          rec.placement_type === 'swap' ? 'bg-warning' : 'bg-info';
+                          rec.placement_type === 'displacement' ? 'bg-warning' : 
+                          rec.placement_type === 'swap' ? 'bg-info' : 'bg-secondary';
         
         let buttonText = 'Move to This Slot';
         let placementDescription = '';
+        let pairingInfo = '';
+        
+        // Extract rich pairing information from displacement_info
+        if (rec.displacement_info) {
+            if (rec.displacement_info.pairing_info) {
+                pairingInfo = rec.displacement_info.pairing_info;
+            }
+            
+            if (rec.displacement_info.priority_reason) {
+                placementDescription = rec.displacement_info.priority_reason;
+            }
+        }
         
         if (rec.placement_type === 'direct') {
             buttonText = 'Direct Move';
-            placementDescription = 'Direct placement in available slot';
+            if (!placementDescription) placementDescription = 'Direct placement in available slot';
+        } else if (rec.placement_type === 'displacement') {
+            buttonText = 'Execute Displacement';
+            if (!placementDescription) placementDescription = 'Displace another student for better fit';
         } else if (rec.placement_type === 'swap') {
             buttonText = 'Execute Swap (2 students)';
             placementDescription = 'Swap with 1 other student';
@@ -533,7 +549,7 @@ function showSlotRecommendations(recommendations, studentName) {
             placementDescription = `Chain of ${rec.chain_length} moves affecting ${rec.affected_students} students`;
         }
         
-        modalContent += '<div class="card mb-3">' +
+        modalContent += '<div class="card mb-3 border-' + (rec.placement_type === 'direct' ? 'success' : 'primary') + '">' +
             '<div class="card-header d-flex justify-content-between align-items-center">' +
             '<div>' +
             '<strong>' + rec.group_name + '</strong>' +
@@ -553,16 +569,29 @@ function showSlotRecommendations(recommendations, studentName) {
             '</div>' +
             '<div class="col-md-6">' +
             '<p class="mb-1"><strong>Placement:</strong> ' + placementDescription + '</p>' +
-            (rec.placement_type === 'swap' ? 
-                '<p class="mb-1"><strong>Swap with:</strong> ' + rec.displaced_student + '</p>' : 
-                '') +
-            (rec.placement_type === 'chain' ? 
-                '<p class="mb-1"><strong>Chain Length:</strong> ' + rec.chain_length + ' moves</p>' + 
-                '<p class="mb-1"><strong>Affected:</strong> ' + rec.affected_students + ' students</p>' : 
-                '') +
+            (rec.explanation ? '<p class="mb-1"><strong>Details:</strong> ' + rec.explanation + '</p>' : '') +
             '</div>' +
-            '</div>' +
-            '<div class="mt-2">' +
+            '</div>';
+        
+        // Add rich pairing information if available
+        if (pairingInfo) {
+            modalContent += '<div class="alert alert-info mt-2 mb-2">' +
+                '<h6 class="alert-heading"><i class="bi bi-people me-2"></i>Group Composition</h6>' +
+                '<p class="mb-0">' + pairingInfo + '</p>' +
+                '</div>';
+        }
+        
+        // Add displacement details if available
+        if (rec.displacement_info && rec.displacement_info.displaced_student) {
+            const displacedStudent = rec.displacement_info.displaced_student;
+            modalContent += '<div class="alert alert-warning mt-2 mb-2">' +
+                '<h6 class="alert-heading"><i class="bi bi-arrow-left-right me-2"></i>Displacement Details</h6>' +
+                '<p class="mb-0">This move will displace: <strong>' + displacedStudent.student_name + '</strong> (' + 
+                displacedStudent.skill_level + ', ' + displacedStudent.enrollment_type + ')</p>' +
+                '</div>';
+        }
+        
+        modalContent += '<div class="mt-2">' +
             '<button class="btn btn-primary btn-sm" onclick="executeRecommendation(' + index + ')">' +
             '<i class="bi bi-check-circle me-1"></i>' + buttonText +
             '</button>' +

@@ -541,7 +541,7 @@ def create_note_view(request, record_pk):
 
 @login_required
 def find_better_slot_api(request, student_id):
-    """Advanced API endpoint using PostgreSQL RPC function for comprehensive slot optimization"""
+    """Enhanced API endpoint combining PostgreSQL RPC function with Python swap chain engine"""
     import logging
     import time as time_module
     from django.db import connection
@@ -555,7 +555,7 @@ def find_better_slot_api(request, student_id):
     
     try:
         # First check if student exists with detailed logging
-        logger.info(f"🚀 ADVANCED SLOT FINDER: Starting analysis for student {student_id}")
+        logger.info(f"🚀 ENHANCED SLOT FINDER: Starting comprehensive analysis for student {student_id}")
         
         try:
             student = Student.objects.get(pk=student_id)
@@ -581,6 +581,7 @@ def find_better_slot_api(request, student_id):
             
             if current_enrollment:
                 active_term_id = current_enrollment.term.id
+                active_term = current_enrollment.term
                 logger.info(f"📅 Using student's active enrollment term: {current_enrollment.term.name} (ID: {active_term_id})")
             else:
                 # Fallback to system active term
@@ -602,7 +603,10 @@ def find_better_slot_api(request, student_id):
                 'error': f'Could not determine active term: {str(e)}'
             })
 
-        # Call the advanced PostgreSQL function
+        # PHASE 1: PostgreSQL Direct Placements and Displacements
+        logger.info("🔍 Phase 1: PostgreSQL direct placements and displacements")
+        postgresql_recommendations = []
+        
         with connection.cursor() as cursor:
             logger.info(f"🔍 Calling PostgreSQL optimization function with student_id={student_id}, term_id={active_term_id}...")
             
@@ -612,15 +616,13 @@ def find_better_slot_api(request, student_id):
                     compatibility_score, placement_type, current_size, max_capacity,
                     displacement_info, explanation, feasibility_score
                 FROM find_optimal_slots_advanced(%s, %s, %s, %s)
-            """, [student_id, active_term_id, True, 10])  # student_id, term_id, include_displacements, max_results
+            """, [student_id, active_term_id, True, 15])  # Increased to 15 results
             
             results = cursor.fetchall()
             
-        analysis_time = time_module.time() - start_time
-        logger.info(f"🎯 PostgreSQL analysis completed in {analysis_time:.2f} seconds. Found {len(results)} recommendations.")
+        logger.info(f"🎯 PostgreSQL found {len(results)} recommendations")
         
-        # Convert results to JSON-serializable format
-        recommendations_data = []
+        # Convert PostgreSQL results to JSON-serializable format
         for row in results:
             (slot_id, group_id, group_name, coach_name, day_name, time_slot,
              compatibility_score, placement_type, current_size, max_capacity,
@@ -630,7 +632,7 @@ def find_better_slot_api(request, student_id):
                 'group_name': group_name,
                 'group_id': group_id,
                 'score': compatibility_score,
-                'percentage': int((compatibility_score / 370) * 100),  # Convert to percentage
+                'percentage': int((compatibility_score / 370) * 100),
                 'placement_type': placement_type,
                 'day_name': day_name,
                 'time_slot': time_slot,
@@ -645,22 +647,98 @@ def find_better_slot_api(request, student_id):
             # Add placement-specific data from displacement_info
             if displacement_info:
                 if displacement_info.get('type') == 'displacement':
-                    displaced_students = displacement_info.get('displaced_students', [])
-                    if displaced_students:
-                        rec_data['displaced_students'] = [
-                            f"{s.get('student_name', 'Unknown')} ({s.get('enrollment_type', 'Unknown')})"
-                            for s in displaced_students
-                        ]
+                    displaced_student = displacement_info.get('displaced_student')
+                    if displaced_student:
+                        rec_data['displaced_student'] = displaced_student
                         rec_data['complexity'] = displacement_info.get('complexity', 1)
             
-            recommendations_data.append(rec_data)
+            postgresql_recommendations.append(rec_data)
         
-        # Categorize recommendations
-        direct_placements = [r for r in recommendations_data if r['placement_type'] == 'direct']
-        displacements = [r for r in recommendations_data if r['placement_type'] == 'displacement']
+        # PHASE 2: Python Swap Chain Engine (if we have time and want more options)
+        python_recommendations = []
+        remaining_time = 30 - (time_module.time() - start_time)  # Reserve 30 seconds total
         
-        # Provide helpful message based on results
-        if not recommendations_data:
+        if remaining_time > 5 and len(postgresql_recommendations) < 10:  # Only if we need more options
+            logger.info("🔍 Phase 2: Python swap chain analysis")
+            try:
+                from .slot_finder import EnhancedSlotFinderEngine
+                
+                # Use the enhanced Python engine for complex swap chains
+                engine = EnhancedSlotFinderEngine()
+                python_results = engine.find_optimal_slots(
+                    student, 
+                    max_results=5,  # Limit to avoid duplication
+                    include_swaps=True,
+                    include_chains=True,
+                    max_time_seconds=int(remaining_time)
+                )
+                
+                logger.info(f"🎯 Python engine found {len(python_results)} additional recommendations")
+                
+                # Convert Python results to JSON format
+                for rec in python_results:
+                    # Skip if we already have this group from PostgreSQL
+                    if any(pg_rec['group_id'] == rec.group.id for pg_rec in postgresql_recommendations):
+                        continue
+                    
+                    rec_data = {
+                        'group_name': rec.group.name,
+                        'group_id': rec.group.id,
+                        'score': rec.score,
+                        'percentage': int((rec.score / 370) * 100),
+                        'placement_type': rec.placement_type,
+                        'day_name': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][rec.group.day_of_week],
+                        'time_slot': str(rec.group.time_slot),
+                        'coach_name': str(rec.group.coach) if rec.group.coach else 'No Coach',
+                        'current_size': rec.group.get_current_size(),
+                        'max_capacity': rec.group.max_capacity,
+                        'explanation': f"Python engine: {rec.placement_type} placement",
+                        'feasibility_score': rec.score,
+                        'displacement_info': {
+                            'type': rec.placement_type,
+                            'python_engine': True
+                        }
+                    }
+                    
+                    # Add swap/chain specific data
+                    if rec.placement_type == 'swap' and hasattr(rec, 'swap_chain') and rec.swap_chain:
+                        rec_data['swap_chain'] = rec.swap_chain
+                        rec_data['chain_length'] = rec.swap_chain.get_chain_length() if rec.swap_chain else 1
+                        rec_data['affected_students'] = len(rec.swap_chain.get_affected_students()) if rec.swap_chain else 1
+                    elif rec.placement_type == 'chain' and hasattr(rec, 'swap_chain') and rec.swap_chain:
+                        rec_data['swap_chain'] = rec.swap_chain
+                        rec_data['chain_length'] = rec.swap_chain.get_chain_length()
+                        rec_data['affected_students'] = len(rec.swap_chain.get_affected_students())
+                    
+                    python_recommendations.append(rec_data)
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Python swap chain analysis failed: {str(e)}")
+        
+        # PHASE 3: Combine and rank all recommendations
+        all_recommendations = postgresql_recommendations + python_recommendations
+        
+        # Sort by score (highest first), then by placement type preference
+        placement_priority = {'direct': 3, 'displacement': 2, 'swap': 1, 'chain': 0}
+        all_recommendations.sort(
+            key=lambda x: (x['score'], placement_priority.get(x['placement_type'], 0)), 
+            reverse=True
+        )
+        
+        # Limit to top recommendations
+        final_recommendations = all_recommendations[:10]
+        
+        analysis_time = time_module.time() - start_time
+        logger.info(f"🎯 Complete analysis finished in {analysis_time:.2f} seconds")
+        
+        # Categorize final recommendations
+        direct_placements = [r for r in final_recommendations if r['placement_type'] == 'direct']
+        displacements = [r for r in final_recommendations if r['placement_type'] == 'displacement']
+        swaps = [r for r in final_recommendations if r['placement_type'] == 'swap']
+        chains = [r for r in final_recommendations if r['placement_type'] == 'chain']
+        
+        # Provide comprehensive message
+        if not final_recommendations:
             message = f"No alternative slots found for {student.first_name}. Current placement appears optimal!"
         else:
             message_parts = []
@@ -668,26 +746,34 @@ def find_better_slot_api(request, student_id):
                 message_parts.append(f"{len(direct_placements)} direct placement(s)")
             if displacements:
                 message_parts.append(f"{len(displacements)} displacement option(s)")
+            if swaps:
+                message_parts.append(f"{len(swaps)} swap option(s)")
+            if chains:
+                message_parts.append(f"{len(chains)} chain move(s)")
             
             message = f"Found {' and '.join(message_parts)} for {student.first_name}"
         
-        logger.info(f"📊 Results: {len(direct_placements)} direct, {len(displacements)} displacement options")
+        logger.info(f"📊 Final Results: {len(direct_placements)} direct, {len(displacements)} displacement, {len(swaps)} swap, {len(chains)} chain options")
         
         return JsonResponse({
             'success': True,
-            'recommendations': recommendations_data,
+            'recommendations': final_recommendations,
             'student_name': f"{student.first_name} {student.last_name}",
             'analysis_time': f"{analysis_time:.2f} seconds",
             'message': message,
             'summary': {
-                'total': len(recommendations_data),
+                'total': len(final_recommendations),
                 'direct_placements': len(direct_placements),
-                'displacements': len(displacements)
+                'displacements': len(displacements),
+                'swaps': len(swaps),
+                'chains': len(chains),
+                'postgresql_results': len(postgresql_recommendations),
+                'python_results': len(python_recommendations)
             }
         })
         
     except Exception as e:
-        logger.error(f"💥 Advanced slot finder error for student {student_id}: {str(e)}")
+        logger.error(f"💥 Enhanced slot finder error for student {student_id}: {str(e)}")
         return JsonResponse({
             'success': False, 
             'error': f'Advanced analysis failed: {str(e)}. Please try again or contact support.'
@@ -697,6 +783,9 @@ def find_better_slot_api(request, student_id):
 @login_required
 def execute_slot_move_api(request, student_id):
     """API endpoint for executing a slot move"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST request required'})
     
@@ -705,44 +794,129 @@ def execute_slot_move_api(request, student_id):
     
     try:
         data = json.loads(request.body)
+        logger.info(f"🔄 SLOT MOVE: Starting move for student {student_id} with data: {data}")
+        
         student = get_object_or_404(Student, pk=student_id)
         target_group_id = data.get('group_id')
-        placement_type = data.get('placement_type')
+        placement_type = data.get('placement_type', 'direct')
+        
+        logger.info(f"✅ Found student: {student.first_name} {student.last_name}")
         
         if not target_group_id:
+            logger.error("❌ No group_id provided in request data")
             return JsonResponse({'success': False, 'error': 'Group ID required'})
         
         target_group = get_object_or_404(ScheduledGroup, pk=target_group_id)
-        current_term = Term.get_active_term()
+        logger.info(f"✅ Found target group: {target_group.name}")
         
+        current_term = Term.get_active_term()
         if not current_term:
+            logger.error("❌ No active term found")
             return JsonResponse({'success': False, 'error': 'No active term found'})
+        
+        logger.info(f"✅ Active term: {current_term.name}")
         
         # Get student's enrollment
         try:
             enrollment = student.enrollment_set.get(term=current_term)
+            logger.info(f"✅ Found enrollment: {enrollment.enrollment_type} type")
         except Enrollment.DoesNotExist:
+            logger.error(f"❌ Student {student.first_name} not enrolled in current term {current_term.name}")
             return JsonResponse({'success': False, 'error': 'Student not enrolled in current term'})
         
         # Handle different placement types
         if placement_type == 'direct':
+            logger.info("🎯 Processing DIRECT placement")
+            
             # Check if group has space
             if not target_group.has_space():
+                logger.error(f"❌ Target group {target_group.name} is full ({target_group.get_current_size()}/{target_group.max_capacity})")
                 return JsonResponse({'success': False, 'error': 'Target group is full'})
             
-            # Remove from current groups
-            current_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
-            for group in current_groups:
-                group.members.remove(enrollment)
+            logger.info(f"✅ Target group has space: {target_group.get_current_size()}/{target_group.max_capacity}")
             
-            # Add to new group
-            target_group.members.add(enrollment)
+            # Use atomic transaction for safety
+            try:
+                with transaction.atomic():
+                    # Find current groups for this student
+                    current_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
+                    logger.info(f"📋 Student currently in {current_groups.count()} groups: {[g.name for g in current_groups]}")
+                    
+                    # Remove from current groups
+                    for group in current_groups:
+                        logger.info(f"➖ Removing from group: {group.name}")
+                        group.members.remove(enrollment)
+                    
+                    # Add to new group
+                    logger.info(f"➕ Adding to new group: {target_group.name}")
+                    target_group.members.add(enrollment)
+                    
+                    # Verify the move worked
+                    new_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
+                    logger.info(f"✅ Move completed. Student now in {new_groups.count()} groups: {[g.name for g in new_groups]}")
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Successfully moved {student.first_name} to {target_group.name}',
+                        'new_group': target_group.name,
+                        'previous_groups': [g.name for g in current_groups],
+                        'debug_info': {
+                            'student_id': student_id,
+                            'enrollment_id': enrollment.id,
+                            'target_group_id': target_group_id,
+                            'placement_type': placement_type
+                        }
+                    })
+                    
+            except Exception as e:
+                logger.error(f"💥 Transaction failed during direct move: {str(e)}")
+                return JsonResponse({'success': False, 'error': f'Move failed: {str(e)}'})
+        
+        elif placement_type == 'displacement':
+            logger.info("🎯 Processing DISPLACEMENT placement")
             
-            return JsonResponse({
-                'success': True,
-                'message': f'Successfully moved {student.first_name} to {target_group.name}',
-                'new_group': target_group.name
-            })
+            # For displacement, we treat it as a direct move since the PostgreSQL function
+            # has already identified this as a valid displacement scenario
+            if not target_group.has_space():
+                logger.info(f"✅ Target group appears full but displacement is valid: {target_group.get_current_size()}/{target_group.max_capacity}")
+            
+            # Use atomic transaction for safety
+            try:
+                with transaction.atomic():
+                    # Find current groups for this student
+                    current_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
+                    logger.info(f"📋 Student currently in {current_groups.count()} groups: {[g.name for g in current_groups]}")
+                    
+                    # Remove from current groups
+                    for group in current_groups:
+                        logger.info(f"➖ Removing from group: {group.name}")
+                        group.members.remove(enrollment)
+                    
+                    # Add to new group (displacement logic handled by PostgreSQL validation)
+                    logger.info(f"➕ Adding to new group via displacement: {target_group.name}")
+                    target_group.members.add(enrollment)
+                    
+                    # Verify the move worked
+                    new_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
+                    logger.info(f"✅ Displacement completed. Student now in {new_groups.count()} groups: {[g.name for g in new_groups]}")
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Successfully moved {student.first_name} to {target_group.name} via displacement',
+                        'new_group': target_group.name,
+                        'previous_groups': [g.name for g in current_groups],
+                        'placement_type': 'displacement',
+                        'debug_info': {
+                            'student_id': student_id,
+                            'enrollment_id': enrollment.id,
+                            'target_group_id': target_group_id,
+                            'placement_type': placement_type
+                        }
+                    })
+                    
+            except Exception as e:
+                logger.error(f"💥 Transaction failed during displacement move: {str(e)}")
+                return JsonResponse({'success': False, 'error': f'Displacement failed: {str(e)}'})
             
         elif placement_type == 'swap':
             # Handle swap operations
