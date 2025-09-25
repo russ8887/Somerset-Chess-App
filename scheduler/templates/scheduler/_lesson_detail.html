@@ -15,7 +15,7 @@
             <li class="list-group-item{% if record.has_conflict %} border-danger border-2{% endif %}" id="student-row-{{ record.pk }}">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="d-flex align-items-center gap-2">
-                        <a href="{% url 'student-report' record.enrollment.student.pk lesson.scheduled_group.term.pk %}?date={{ lesson.lesson_date|date:'Y-m-d' }}{% if request.GET.coach %}&coach={{ request.GET.coach }}{% endif %}"
+                        <a href="{% url 'student-report' record.enrollment.student.pk lesson.scheduled_group.term.pk %}?date={{ lesson.lesson_date|date:'Y-m-d' }}{% if view_coach and view_coach.id != user.coach.id %}&coach={{ view_coach.id }}{% endif %}"
                            class="student-link fw-bold text-dark text-decoration-none">
                             {{ record.enrollment.student }}
                             <small class="text-muted">({{ record.enrollment.get_enrollment_type_display }})</small>

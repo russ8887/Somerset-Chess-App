@@ -19,7 +19,7 @@ from django.http import JsonResponse
 from django.db.models import Avg, Max, Min
 import json
 
-def _prepare_lesson_context(lesson, editing_note_id=None):
+def _prepare_lesson_context(lesson, editing_note_id=None, request=None):
     """A single, reliable helper to prepare all context for the lesson detail template."""
     lesson.has_absences = lesson.attendancerecord_set.filter(status='ABSENT').exists()
     
@@ -29,7 +29,25 @@ def _prepare_lesson_context(lesson, editing_note_id=None):
         if not hasattr(record, '_conflict_info'):
             record._conflict_info = record.get_scheduling_conflict()
     
-    return {'lesson': lesson, 'editing_note_id': editing_note_id}
+    context = {'lesson': lesson, 'editing_note_id': editing_note_id}
+    
+    # Add request context if available (needed for template variables)
+    if request:
+        context['user'] = request.user
+        # Get view_coach similar to DashboardView logic
+        if hasattr(request.user, 'coach'):
+            target_coach_id = request.GET.get('coach')
+            if request.user.coach.is_head_coach and target_coach_id:
+                try:
+                    context['view_coach'] = Coach.objects.select_related('user').get(pk=target_coach_id)
+                except Coach.DoesNotExist:
+                    context['view_coach'] = request.user.coach
+            else:
+                context['view_coach'] = request.user.coach
+        else:
+            context['view_coach'] = None
+    
+    return context
 
 # --- Main Page Views ---
 
@@ -513,7 +531,7 @@ def mark_attendance(request, pk, status):
         record.reason_for_absence = None
     
     record.save()
-    context = _prepare_lesson_context(record.lesson_session)
+    context = _prepare_lesson_context(record.lesson_session, request=request)
     return render(request, 'scheduler/_lesson_detail.html', context)
 
 @login_required
@@ -524,7 +542,7 @@ def save_reason(request, pk, reason_code):
         record.reason_for_absence = reason_code
         record.save()
     lesson = record.lesson_session
-    context = _prepare_lesson_context(lesson)
+    context = _prepare_lesson_context(lesson, request=request)
     return render(request, 'scheduler/_lesson_detail.html', context)
 
 @login_required
