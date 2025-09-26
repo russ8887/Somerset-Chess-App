@@ -399,6 +399,15 @@
                     timestamp: new Date().toISOString()
                 });
                 
+                // 🔍 LOG ACTUAL SERVER RESPONSE CONTENT
+                console.log('📄 Server Response Content (Notes):', {
+                    url: event.detail.pathInfo.requestPath,
+                    responseText: event.detail.xhr.responseText,
+                    responseHTML: event.detail.xhr.responseText ? event.detail.xhr.responseText.substring(0, 1000) + (event.detail.xhr.responseText.length > 1000 ? '...' : '') : 'No content',
+                    contentType: event.detail.xhr.getResponseHeader('Content-Type'),
+                    hasContent: !!event.detail.xhr.responseText && event.detail.xhr.responseText.trim().length > 0
+                });
+                
                 if (event.detail.xhr.status !== 200) {
                     console.error('❌ HTMX Request Failed (Notes):', {
                         status: event.detail.xhr.status,
@@ -431,31 +440,67 @@
 
         document.body.addEventListener('htmx:beforeSwap', function(event) {
             if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                // Capture current DOM state before swap
+                const targetElement = event.detail.target;
+                const currentHTML = targetElement.innerHTML;
+                
                 console.log('🔄 HTMX Before Swap (Notes):', {
                     url: event.detail.pathInfo.requestPath,
                     target: event.detail.target.id || event.detail.target.tagName,
                     swapStyle: event.detail.swapStyle,
-                    responseLength: event.detail.xhr.responseText ? event.detail.xhr.responseText.length : 0
+                    responseLength: event.detail.xhr.responseText ? event.detail.xhr.responseText.length : 0,
+                    currentTargetHTML: currentHTML.substring(0, 500) + (currentHTML.length > 500 ? '...' : ''),
+                    targetElementId: targetElement.id,
+                    targetElementClass: targetElement.className
                 });
             }
         });
 
         document.body.addEventListener('htmx:afterSwap', function(event) {
             if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                // Capture new DOM state after swap
+                const targetElement = event.detail.target;
+                const newHTML = targetElement.innerHTML;
+                
                 console.log('✅ HTMX After Swap (Notes):', {
                     url: event.detail.pathInfo.requestPath,
                     target: event.detail.target.id || event.detail.target.tagName,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    newTargetHTML: newHTML.substring(0, 500) + (newHTML.length > 500 ? '...' : ''),
+                    targetElementVisible: targetElement.offsetHeight > 0 && targetElement.offsetWidth > 0,
+                    targetElementStyle: window.getComputedStyle(targetElement).display
                 });
                 
                 // Check if note display elements were added
                 const noteDisplays = event.detail.target.querySelectorAll('.lesson-note-display');
                 const noteForms = event.detail.target.querySelectorAll('.lesson-note-form');
+                const debugAlerts = event.detail.target.querySelectorAll('.alert');
                 
                 console.log('📋 Notes Content After Swap:', {
                     noteDisplays: noteDisplays.length,
                     noteForms: noteForms.length,
-                    hasNoteButtons: event.detail.target.querySelectorAll('.note-btn').length
+                    hasNoteButtons: event.detail.target.querySelectorAll('.note-btn').length,
+                    debugAlerts: debugAlerts.length,
+                    allElements: event.detail.target.children.length
+                });
+                
+                // Log each note display found
+                noteDisplays.forEach((display, index) => {
+                    console.log(`📝 Note Display ${index + 1}:`, {
+                        noteId: display.dataset.noteId,
+                        debugInfo: display.dataset.debugInfo,
+                        visible: display.offsetHeight > 0 && display.offsetWidth > 0,
+                        innerHTML: display.innerHTML.substring(0, 200) + '...'
+                    });
+                });
+                
+                // Log debug alerts
+                debugAlerts.forEach((alert, index) => {
+                    console.log(`🚨 Debug Alert ${index + 1}:`, {
+                        className: alert.className,
+                        text: alert.textContent.trim(),
+                        visible: alert.offsetHeight > 0 && alert.offsetWidth > 0
+                    });
                 });
             }
         });
