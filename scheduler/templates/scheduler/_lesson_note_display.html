@@ -1,0 +1,52 @@
+{% comment %}
+Template for displaying lesson notes in the roster
+{% endcomment %}
+
+{% if note %}
+    <div class="lesson-note-display" data-note-id="{{ note.pk }}">
+        
+        <div class="note-content">
+            {% if note.student_understanding %}
+                <div class="note-section">
+                    <strong class="text-primary">Understanding:</strong>
+                    <span class="note-text">{{ note.student_understanding }}</span>
+                </div>
+            {% endif %}
+            
+            {% if note.topics_covered %}
+                <div class="note-section">
+                    <strong class="text-info">Topics:</strong>
+                    <span class="note-text">{{ note.topics_covered }}</span>
+                </div>
+            {% endif %}
+            
+            {% if note.coach_comments %}
+                <div class="note-section">
+                    <strong class="text-success">Comments:</strong>
+                    <span class="note-text">{{ note.coach_comments }}</span>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% else %}
+    <script>
+    console.warn('⚠️ _lesson_note_display.html: No note provided to template');
+    </script>
+    <span class="text-muted fst-italic">No note available</span>
+{% endif %}
+
+<style>
+.lesson-note-display {
+    font-size: 0.9em;
+    margin-top: 0.5em;
+}
+
+.note-section {
+    margin-bottom: 0.3em;
+}
+
+.note-text {
+    margin-left: 0.5em;
+    color: #666;
+}
+</style>

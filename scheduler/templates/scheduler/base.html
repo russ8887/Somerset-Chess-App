@@ -348,6 +348,156 @@
                 reportModal.show();
             }
         });
+
+        // 🔍 COMPREHENSIVE NOTES DEBUGGING
+        console.log('🚀 Somerset Chess App - Notes Debugging Enabled');
+        
+        // Debug all note button clicks
+        document.addEventListener('click', function(event) {
+            if (event.target.closest('.note-btn')) {
+                const btn = event.target.closest('.note-btn');
+                console.log('🎯 Note button clicked:', {
+                    action: btn.dataset.action,
+                    noteId: btn.dataset.noteId,
+                    recordId: btn.dataset.recordId,
+                    studentName: btn.dataset.studentName,
+                    url: btn.getAttribute('hx-get'),
+                    target: btn.getAttribute('hx-target') || 'default'
+                });
+            }
+        });
+
+        // 📡 HTMX Event Debugging for Notes
+        document.body.addEventListener('htmx:configRequest', function(event) {
+            if (event.detail.path.includes('/note/')) {
+                console.log('📤 HTMX Request (Notes):', {
+                    method: event.detail.verb,
+                    url: event.detail.path,
+                    target: event.detail.target.id || event.detail.target.tagName,
+                    headers: event.detail.headers
+                });
+            }
+        });
+
+        document.body.addEventListener('htmx:beforeRequest', function(event) {
+            if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                console.log('⏳ HTMX Before Request (Notes):', {
+                    url: event.detail.pathInfo.requestPath,
+                    element: event.detail.elt.tagName + (event.detail.elt.className ? '.' + event.detail.elt.className.replace(/\s+/g, '.') : ''),
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', function(event) {
+            if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                console.log('📥 HTMX After Request (Notes):', {
+                    url: event.detail.pathInfo.requestPath,
+                    status: event.detail.xhr.status,
+                    statusText: event.detail.xhr.statusText,
+                    responseLength: event.detail.xhr.responseText ? event.detail.xhr.responseText.length : 0,
+                    timestamp: new Date().toISOString()
+                });
+                
+                if (event.detail.xhr.status !== 200) {
+                    console.error('❌ HTMX Request Failed (Notes):', {
+                        status: event.detail.xhr.status,
+                        response: event.detail.xhr.responseText,
+                        url: event.detail.pathInfo.requestPath
+                    });
+                }
+            }
+        });
+
+        document.body.addEventListener('htmx:responseError', function(event) {
+            if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                console.error('💥 HTMX Response Error (Notes):', {
+                    url: event.detail.pathInfo.requestPath,
+                    status: event.detail.xhr.status,
+                    error: event.detail.xhr.statusText,
+                    response: event.detail.xhr.responseText
+                });
+            }
+        });
+
+        document.body.addEventListener('htmx:sendError', function(event) {
+            if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                console.error('🚫 HTMX Send Error (Notes):', {
+                    url: event.detail.pathInfo.requestPath,
+                    error: event.detail.error
+                });
+            }
+        });
+
+        document.body.addEventListener('htmx:beforeSwap', function(event) {
+            if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                console.log('🔄 HTMX Before Swap (Notes):', {
+                    url: event.detail.pathInfo.requestPath,
+                    target: event.detail.target.id || event.detail.target.tagName,
+                    swapStyle: event.detail.swapStyle,
+                    responseLength: event.detail.xhr.responseText ? event.detail.xhr.responseText.length : 0
+                });
+            }
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.pathInfo.requestPath.includes('/note/')) {
+                console.log('✅ HTMX After Swap (Notes):', {
+                    url: event.detail.pathInfo.requestPath,
+                    target: event.detail.target.id || event.detail.target.tagName,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Check if note display elements were added
+                const noteDisplays = event.detail.target.querySelectorAll('.lesson-note-display');
+                const noteForms = event.detail.target.querySelectorAll('.lesson-note-form');
+                
+                console.log('📋 Notes Content After Swap:', {
+                    noteDisplays: noteDisplays.length,
+                    noteForms: noteForms.length,
+                    hasNoteButtons: event.detail.target.querySelectorAll('.note-btn').length
+                });
+            }
+        });
+
+        // 🎯 Form Submission Debugging
+        document.addEventListener('submit', function(event) {
+            if (event.target.closest('.note-form')) {
+                console.log('📝 Note form submitted:', {
+                    action: event.target.action,
+                    method: event.target.method,
+                    formData: new FormData(event.target),
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        // 🔍 Page Load Debugging
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 Page loaded - Notes debugging active');
+            
+            // Count existing note elements
+            const noteButtons = document.querySelectorAll('.note-btn');
+            const noteDisplays = document.querySelectorAll('.lesson-note-display');
+            const noteForms = document.querySelectorAll('.lesson-note-form');
+            
+            console.log('📊 Initial Notes Count:', {
+                noteButtons: noteButtons.length,
+                noteDisplays: noteDisplays.length,
+                noteForms: noteForms.length
+            });
+            
+            // Log each note button
+            noteButtons.forEach((btn, index) => {
+                console.log(`🔘 Note Button ${index + 1}:`, {
+                    action: btn.dataset.action,
+                    noteId: btn.dataset.noteId,
+                    recordId: btn.dataset.recordId,
+                    studentName: btn.dataset.studentName,
+                    url: btn.getAttribute('hx-get')
+                });
+            });
+        });
     </script>
     
     {# This is the crucial placeholder for page-specific scripts #}
