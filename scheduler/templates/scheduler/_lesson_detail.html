@@ -81,6 +81,7 @@
                         {% if lesson_note %}
                             <button class="btn btn-sm btn-outline-info note-btn" 
                                     hx-get="{% url 'view-note' lesson_note.pk %}" 
+                                    hx-target="#note-display-{{ lesson_note.pk }}"
                                     title="View note"
                                     data-action="view"
                                     data-note-id="{{ lesson_note.pk }}"
@@ -90,6 +91,7 @@
                             </button>
                             <button class="btn btn-sm btn-outline-secondary note-btn" 
                                     hx-get="{% url 'edit-note' lesson_note.pk %}" 
+                                    hx-target="#note-form-{{ record.pk }}"
                                     title="Edit note"
                                     data-action="edit"
                                     data-note-id="{{ lesson_note.pk }}"
@@ -100,6 +102,7 @@
                         {% else %}
                             <button class="btn btn-sm btn-outline-primary note-btn" 
                                     hx-get="{% url 'create-note' record.pk %}" 
+                                    hx-target="#note-form-{{ record.pk }}"
                                     title="Add note"
                                     data-action="create"
                                     data-record-id="{{ record.pk }}"
@@ -109,6 +112,20 @@
                             </button>
                         {% endif %}
                     {% endwith %}
+                </div>
+
+                {# --- Note Display Section --- #}
+                {% with lesson_note=record.lessonnote|default:None %}
+                    {% if lesson_note %}
+                        <div id="note-display-{{ lesson_note.pk }}" class="mt-2">
+                            {% include "scheduler/_lesson_note_display.html" with note=lesson_note %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
+                {# --- Note Form Section --- #}
+                <div id="note-form-{{ record.pk }}" class="mt-2">
+                    {# This will be populated by HTMX when creating/editing notes #}
                 </div>
 
                 {# Note editing form - show when editing_note_id matches this record's note #}
