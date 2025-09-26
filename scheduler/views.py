@@ -547,13 +547,29 @@ def create_note_view(request, record_pk):
     note, created = LessonNote.objects.get_or_create(attendance_record=record)
     lesson = record.lesson_session
     
-    # The view now creates the form and passes it in the context
-    form = LessonNoteForm(instance=note)
+    if request.method == 'POST':
+        form = LessonNoteForm(request.POST, instance=note)
+        if form.is_valid():
+            form.save()
+            # After saving, redirect to refresh the lesson view
+            return redirect('dashboard')
+    else:
+        form = LessonNoteForm(instance=note)
     
-    context = _prepare_lesson_context(lesson, editing_note_id=note.id)
-    context['note_form'] = form # Add the form to the context
-    
-    return render(request, 'scheduler/_lesson_detail.html', context)
+    # Check if this is an HTMX request
+    if request.headers.get('HX-Request'):
+        # Return just the form for HTMX
+        context = {
+            'note_form': form,
+            'note': note,
+            'record': record
+        }
+        return render(request, 'scheduler/_note_form_response.html', context)
+    else:
+        # Return full lesson context for regular requests
+        context = _prepare_lesson_context(lesson, editing_note_id=note.id)
+        context['note_form'] = form
+        return render(request, 'scheduler/_lesson_detail.html', context)
 
 
 # --- Intelligent Slot Finder API Views ---
@@ -1116,17 +1132,26 @@ def edit_lesson_note(request, pk):
         form = LessonNoteForm(request.POST, instance=note)
         if form.is_valid():
             form.save()
-            # After saving, we just show the view state, no form needed
-            context = _prepare_lesson_context(lesson)
-            return render(request, 'scheduler/_lesson_detail.html', context)
+            # After saving, redirect to refresh the lesson view
+            return redirect('dashboard')
     else:
         # For a GET request, create the form here
         form = LessonNoteForm(instance=note)
 
-    context = _prepare_lesson_context(lesson, editing_note_id=note.id)
-    context['note_form'] = form # Add the form to the context
-    
-    return render(request, 'scheduler/_lesson_detail.html', context)
+    # Check if this is an HTMX request
+    if request.headers.get('HX-Request'):
+        # Return just the form for HTMX
+        context = {
+            'note_form': form,
+            'note': note,
+            'record': note.attendance_record
+        }
+        return render(request, 'scheduler/_note_form_response.html', context)
+    else:
+        # Return full lesson context for regular requests
+        context = _prepare_lesson_context(lesson, editing_note_id=note.id)
+        context['note_form'] = form
+        return render(request, 'scheduler/_lesson_detail.html', context)
 
 
 # --- Advanced Analytics Dashboard ---
