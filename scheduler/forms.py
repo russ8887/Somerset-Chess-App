@@ -163,29 +163,43 @@ class LessonNoteForm(forms.ModelForm):
         ('5', '⭐⭐⭐⭐⭐ Excellent - Mastered concepts'),
     ]
     
-    # Enhanced fields with predefined options
+    # Enhanced fields with clean dropdown approach
     topics_covered_choices = forms.MultipleChoiceField(
         choices=TOPIC_CHOICES,
-        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-select',
+            'style': 'height: 120px;',
+            'data-placeholder': 'Select topics covered...'
+        }),
         required=False,
-        label="Topics Covered (select all that apply)"
+        label="Topics Covered"
     )
     
     topics_covered_custom = forms.CharField(
-        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Additional topics or details...'}),
+        widget=forms.Textarea(attrs={
+            'rows': 2, 
+            'class': 'form-control',
+            'placeholder': 'Additional topics or details...'
+        }),
         required=False,
         label="Additional Topics"
     )
     
     student_understanding_rating = forms.ChoiceField(
-        choices=UNDERSTANDING_CHOICES,
-        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        choices=[('', 'Select understanding level...')] + UNDERSTANDING_CHOICES,
+        widget=forms.Select(attrs={
+            'class': 'form-select'
+        }),
         required=False,
         label="Student Understanding Level"
     )
     
     student_understanding_notes = forms.CharField(
-        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Additional notes about student understanding...'}),
+        widget=forms.Textarea(attrs={
+            'rows': 2, 
+            'class': 'form-control',
+            'placeholder': 'Additional notes about student understanding...'
+        }),
         required=False,
         label="Understanding Notes"
     )

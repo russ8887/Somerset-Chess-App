@@ -9,104 +9,75 @@ Template for HTMX note form responses (create/edit)
     
     {% if note_form %}
         
-        <form method="post" class="note-form" style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.375rem; border: 1px solid #dee2e6;">
+        <form method="post" class="note-form bg-white p-4 rounded border">
             {% csrf_token %}
             
-            {# Enhanced Student Understanding Section #}
+            {# Student Understanding Section #}
             <div class="mb-4">
-                <h6 class="text-primary mb-3">📊 Student Understanding</h6>
+                <h6 class="text-primary mb-3 border-bottom pb-2">📊 Student Understanding</h6>
                 
-                <div class="mb-3">
-                    <label class="form-label">
-                        <strong>{{ note_form.student_understanding_rating.label }}:</strong>
-                    </label>
-                    <div class="rating-options">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ note_form.student_understanding_rating.id_for_label }}" class="form-label">
+                            <strong>Understanding Level:</strong>
+                        </label>
                         {{ note_form.student_understanding_rating }}
+                        {% if note_form.student_understanding_rating.errors %}
+                            <div class="text-danger small">{{ note_form.student_understanding_rating.errors }}</div>
+                        {% endif %}
                     </div>
-                    {% if note_form.student_understanding_rating.errors %}
-                        <div class="text-danger">{{ note_form.student_understanding_rating.errors }}</div>
-                    {% endif %}
-                </div>
-                
-                <div class="mb-3">
-                    <label for="{{ note_form.student_understanding_notes.id_for_label }}" class="form-label">
-                        <strong>{{ note_form.student_understanding_notes.label }}:</strong>
-                    </label>
-                    {{ note_form.student_understanding_notes }}
-                    {% if note_form.student_understanding_notes.errors %}
-                        <div class="text-danger">{{ note_form.student_understanding_notes.errors }}</div>
-                    {% endif %}
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ note_form.student_understanding_notes.id_for_label }}" class="form-label">
+                            <strong>Additional Notes:</strong>
+                        </label>
+                        {{ note_form.student_understanding_notes }}
+                        {% if note_form.student_understanding_notes.errors %}
+                            <div class="text-danger small">{{ note_form.student_understanding_notes.errors }}</div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             
-            {# Enhanced Topics Covered Section #}
+            {# Topics Covered Section #}
             <div class="mb-4">
-                <h6 class="text-info mb-3">📚 Topics Covered</h6>
+                <h6 class="text-info mb-3 border-bottom pb-2">📚 Topics Covered</h6>
                 
-                <div class="mb-3">
-                    <label class="form-label">
-                        <strong>{{ note_form.topics_covered_choices.label }}:</strong>
-                    </label>
-                    <div class="topics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.5rem;">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ note_form.topics_covered_choices.id_for_label }}" class="form-label">
+                            <strong>Select Topics:</strong>
+                        </label>
+                        <small class="text-muted d-block mb-2">Hold Ctrl/Cmd to select multiple</small>
                         {{ note_form.topics_covered_choices }}
+                        {% if note_form.topics_covered_choices.errors %}
+                            <div class="text-danger small">{{ note_form.topics_covered_choices.errors }}</div>
+                        {% endif %}
                     </div>
-                    {% if note_form.topics_covered_choices.errors %}
-                        <div class="text-danger">{{ note_form.topics_covered_choices.errors }}</div>
-                    {% endif %}
-                </div>
-                
-                <div class="mb-3">
-                    <label for="{{ note_form.topics_covered_custom.id_for_label }}" class="form-label">
-                        <strong>{{ note_form.topics_covered_custom.label }}:</strong>
-                    </label>
-                    {{ note_form.topics_covered_custom }}
-                    {% if note_form.topics_covered_custom.errors %}
-                        <div class="text-danger">{{ note_form.topics_covered_custom.errors }}</div>
-                    {% endif %}
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ note_form.topics_covered_custom.id_for_label }}" class="form-label">
+                            <strong>Additional Topics:</strong>
+                        </label>
+                        {{ note_form.topics_covered_custom }}
+                        {% if note_form.topics_covered_custom.errors %}
+                            <div class="text-danger small">{{ note_form.topics_covered_custom.errors }}</div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
             
             {# Coach Comments Section #}
             <div class="mb-4">
-                <h6 class="text-success mb-3">💬 Coach Comments</h6>
+                <h6 class="text-success mb-3 border-bottom pb-2">💬 Coach Comments</h6>
                 <div class="mb-3">
                     <label for="{{ note_form.coach_comments.id_for_label }}" class="form-label">
                         <strong>General Comments:</strong>
                     </label>
                     {{ note_form.coach_comments }}
                     {% if note_form.coach_comments.errors %}
-                        <div class="text-danger">{{ note_form.coach_comments.errors }}</div>
+                        <div class="text-danger small">{{ note_form.coach_comments.errors }}</div>
                     {% endif %}
                 </div>
             </div>
-            
-            {# Legacy Fields (Hidden by default, shown for backward compatibility) #}
-            <details class="mb-3">
-                <summary class="text-muted" style="cursor: pointer;">
-                    <small>🔧 Advanced/Legacy Fields (click to expand)</small>
-                </summary>
-                <div class="mt-2 p-2 bg-light border rounded">
-                    <div class="mb-2">
-                        <label for="{{ note_form.student_understanding.id_for_label }}" class="form-label">
-                            <small>Legacy Student Understanding:</small>
-                        </label>
-                        {{ note_form.student_understanding }}
-                        {% if note_form.student_understanding.errors %}
-                            <div class="text-danger">{{ note_form.student_understanding.errors }}</div>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="mb-2">
-                        <label for="{{ note_form.topics_covered.id_for_label }}" class="form-label">
-                            <small>Legacy Topics Covered:</small>
-                        </label>
-                        {{ note_form.topics_covered }}
-                        {% if note_form.topics_covered.errors %}
-                            <div class="text-danger">{{ note_form.topics_covered.errors }}</div>
-                        {% endif %}
-                    </div>
-                </div>
-            </details>
             
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm" onclick="console.log('💾 Saving note form');">

@@ -268,144 +268,38 @@
             }
         }
         
-        /* Enhanced Notes Form Styling */
+        /* Clean Notes Form Styling */
         .note-form-container {
             max-width: 100%;
         }
         
+        .note-form {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
         .note-form h6 {
-            border-bottom: 2px solid currentColor;
-            padding-bottom: 0.5rem;
-            margin-bottom: 1rem !important;
+            font-size: 1.1rem;
+            font-weight: 600;
         }
         
-        /* Fix Django form rendering for radio buttons */
-        .rating-options ul {
-            list-style: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        
-        .rating-options li {
-            display: flex !important;
-            align-items: center !important;
-            padding: 0.5rem !important;
-            margin-bottom: 0.5rem !important;
-            border: 1px solid #dee2e6 !important;
-            border-radius: 0.375rem !important;
-            background-color: #fff !important;
-            transition: all 0.2s ease !important;
-        }
-        
-        .rating-options li:hover {
-            background-color: #f8f9fa !important;
-            border-color: #86b7fe !important;
-        }
-        
-        .rating-options input[type="radio"] {
-            margin-right: 0.75rem !important;
-            margin-top: 0 !important;
-            width: 1.2em !important;
-            height: 1.2em !important;
-        }
-        
-        .rating-options label {
-            margin: 0 !important;
-            cursor: pointer !important;
-            font-weight: 500 !important;
-            flex: 1 !important;
-        }
-        
-        .rating-options input[type="radio"]:checked + label {
-            font-weight: 600 !important;
-            color: #0d6efd !important;
-        }
-        
-        /* Fix Django form rendering for checkboxes */
-        .topics-grid {
-            max-height: 300px !important;
-            overflow-y: auto !important;
-            border: 1px solid #dee2e6 !important;
-            border-radius: 0.375rem !important;
-            padding: 1rem !important;
-            background-color: #fff !important;
-        }
-        
-        .topics-grid ul {
-            list-style: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            display: grid !important;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
-            gap: 0.5rem !important;
-        }
-        
-        .topics-grid li {
-            display: flex !important;
-            align-items: center !important;
-            padding: 0.25rem 0.5rem !important;
-            border-radius: 0.25rem !important;
-            transition: background-color 0.2s ease !important;
-            margin: 0 !important;
-        }
-        
-        .topics-grid li:hover {
-            background-color: #f8f9fa !important;
-        }
-        
-        .topics-grid input[type="checkbox"] {
-            margin-right: 0.5rem !important;
-            margin-top: 0 !important;
-            width: 1.1em !important;
-            height: 1.1em !important;
-        }
-        
-        .topics-grid label {
-            cursor: pointer !important;
-            user-select: none !important;
-            margin: 0 !important;
-            font-weight: 500 !important;
-            flex: 1 !important;
-        }
-        
-        .topics-grid input[type="checkbox"]:checked + label {
-            font-weight: 600 !important;
-            color: #0d6efd !important;
-        }
-        
-        /* Legacy fields styling */
-        details summary {
-            padding: 0.5rem;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
+        /* Ensure form controls have proper styling */
+        .note-form .form-select,
+        .note-form .form-control {
+            border: 1px solid #ced4da;
             border-radius: 0.375rem;
-            margin-bottom: 0.5rem;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
         }
         
-        details[open] summary {
-            border-bottom-left-radius: 0;
-            border-bottom-right-radius: 0;
-            border-bottom: none;
-        }
-        
-        details .bg-light {
-            border-top-left-radius: 0;
-            border-top-right-radius: 0;
+        .note-form .form-select:focus,
+        .note-form .form-control:focus {
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
         }
         
         /* Mobile responsiveness for notes form */
         @media (max-width: 768px) {
-            .topics-grid {
-                grid-template-columns: 1fr !important;
-            }
-            
-            .rating-options {
-                gap: 0.25rem;
-            }
-            
-            .rating-options .form-check {
-                padding: 0.375rem;
-                font-size: 0.9rem;
+            .note-form .row .col-md-6 {
+                margin-bottom: 1rem;
             }
             
             .note-form h6 {
