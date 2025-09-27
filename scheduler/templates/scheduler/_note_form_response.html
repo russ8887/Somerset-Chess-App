@@ -9,7 +9,7 @@ Template for HTMX note form responses (create/edit)
     
     {% if note_form %}
         
-        <form method="post" class="note-form bg-white p-4 rounded border">
+        <form method="post" action="{% if note.pk %}{% url 'edit-note' note.pk %}{% else %}{% url 'create-note' record.pk %}{% endif %}" class="note-form bg-white p-4 rounded border">
             {% csrf_token %}
             
             {# Student Understanding Section #}
