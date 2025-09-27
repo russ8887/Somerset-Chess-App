@@ -129,7 +129,7 @@
                 </div>
 
                 {# Note editing form - show when editing_note_id matches this record's note #}
-                {% if editing_note_id and lesson_note and lesson_note.pk == editing_note_id %}
+                {% if editing_note_id|default:None and lesson_note and lesson_note.pk == editing_note_id %}
                     <div class="mt-3 p-3 bg-light border rounded">
                         <h6>Edit Note for {{ record.enrollment.student }}</h6>
                         {% if note_form %}
