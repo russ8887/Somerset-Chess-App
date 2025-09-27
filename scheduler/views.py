@@ -553,7 +553,7 @@ def create_note_view(request, record_pk):
             form.save()
             # After saving, redirect back to the same date
             lesson_date = lesson.lesson_date.isoformat()
-            return redirect(f'dashboard?date={lesson_date}')
+            return redirect(f'/?date={lesson_date}')
     else:
         form = LessonNoteForm(instance=note)
     
@@ -1145,7 +1145,7 @@ def edit_lesson_note(request, pk):
             form.save()
             # After saving, redirect back to the same date
             lesson_date = lesson.lesson_date.isoformat()
-            return redirect(f'dashboard?date={lesson_date}')
+            return redirect(f'/?date={lesson_date}')
     else:
         # For a GET request, create the form here
         form = LessonNoteForm(instance=note)
