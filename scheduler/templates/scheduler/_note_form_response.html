@@ -8,14 +8,6 @@ Template for HTMX note form responses (create/edit)
     </script>
     
     {% if note_form %}
-        <div class="alert alert-info mb-3">
-            <strong>🔍 DEBUG:</strong> Note form loaded for 
-            {% if note %}
-                editing note ID {{ note.pk }}
-            {% else %}
-                creating new note
-            {% endif %}
-        </div>
         
         <form method="post" class="note-form" style="background-color: #f8f9fa; padding: 1rem; border-radius: 0.375rem; border: 1px solid #dee2e6;">
             {% csrf_token %}

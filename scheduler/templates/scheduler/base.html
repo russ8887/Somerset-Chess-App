@@ -279,64 +279,98 @@
             margin-bottom: 1rem !important;
         }
         
-        .rating-options {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
+        /* Fix Django form rendering for radio buttons */
+        .rating-options ul {
+            list-style: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
         }
         
-        .rating-options .form-check {
-            display: flex;
-            align-items: center;
-            padding: 0.5rem;
-            border: 1px solid #dee2e6;
-            border-radius: 0.375rem;
-            background-color: #fff;
-            transition: all 0.2s ease;
+        .rating-options li {
+            display: flex !important;
+            align-items: center !important;
+            padding: 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+            border: 1px solid #dee2e6 !important;
+            border-radius: 0.375rem !important;
+            background-color: #fff !important;
+            transition: all 0.2s ease !important;
         }
         
-        .rating-options .form-check:hover {
-            background-color: #f8f9fa;
-            border-color: #86b7fe;
+        .rating-options li:hover {
+            background-color: #f8f9fa !important;
+            border-color: #86b7fe !important;
         }
         
-        .rating-options .form-check-input:checked + .form-check-label {
-            font-weight: 600;
-            color: #0d6efd;
+        .rating-options input[type="radio"] {
+            margin-right: 0.75rem !important;
+            margin-top: 0 !important;
+            width: 1.2em !important;
+            height: 1.2em !important;
         }
         
-        .rating-options .form-check-input {
-            margin-right: 0.75rem;
+        .rating-options label {
+            margin: 0 !important;
+            cursor: pointer !important;
+            font-weight: 500 !important;
+            flex: 1 !important;
         }
         
+        .rating-options input[type="radio"]:checked + label {
+            font-weight: 600 !important;
+            color: #0d6efd !important;
+        }
+        
+        /* Fix Django form rendering for checkboxes */
         .topics-grid {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 0.375rem;
-            padding: 1rem;
-            background-color: #fff;
+            max-height: 300px !important;
+            overflow-y: auto !important;
+            border: 1px solid #dee2e6 !important;
+            border-radius: 0.375rem !important;
+            padding: 1rem !important;
+            background-color: #fff !important;
         }
         
-        .topics-grid .form-check {
-            margin-bottom: 0.5rem;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            transition: background-color 0.2s ease;
+        .topics-grid ul {
+            list-style: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
+            gap: 0.5rem !important;
         }
         
-        .topics-grid .form-check:hover {
-            background-color: #f8f9fa;
+        .topics-grid li {
+            display: flex !important;
+            align-items: center !important;
+            padding: 0.25rem 0.5rem !important;
+            border-radius: 0.25rem !important;
+            transition: background-color 0.2s ease !important;
+            margin: 0 !important;
         }
         
-        .topics-grid .form-check-input:checked + .form-check-label {
-            font-weight: 600;
-            color: #0d6efd;
+        .topics-grid li:hover {
+            background-color: #f8f9fa !important;
         }
         
-        .topics-grid .form-check-label {
-            cursor: pointer;
-            user-select: none;
+        .topics-grid input[type="checkbox"] {
+            margin-right: 0.5rem !important;
+            margin-top: 0 !important;
+            width: 1.1em !important;
+            height: 1.1em !important;
+        }
+        
+        .topics-grid label {
+            cursor: pointer !important;
+            user-select: none !important;
+            margin: 0 !important;
+            font-weight: 500 !important;
+            flex: 1 !important;
+        }
+        
+        .topics-grid input[type="checkbox"]:checked + label {
+            font-weight: 600 !important;
+            color: #0d6efd !important;
         }
         
         /* Legacy fields styling */

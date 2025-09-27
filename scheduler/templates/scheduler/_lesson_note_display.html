@@ -2,57 +2,32 @@
 Template for displaying lesson notes in the roster
 {% endcomment %}
 
-{% if note %}
+{% if note and note.student_understanding or note.topics_covered or note.coach_comments %}
     <div class="lesson-note-display" data-note-id="{{ note.pk }}" 
-         data-debug-info="Note ID: {{ note.pk }}"
-         style="border: 2px solid #007bff; padding: 10px; margin: 5px; background-color: #f8f9fa;"
-         onload="console.log('✅ Note display loaded for ID {{ note.pk }}');">
+         style="border-left: 4px solid #007bff; padding: 0.75rem; margin: 0.5rem 0; background-color: #f8f9fa; border-radius: 0.375rem;">
         
         <div class="note-content">
-            <div class="alert alert-info mb-2">
-                <strong>🔍 DEBUG:</strong> Note ID {{ note.pk }} - Display Template
-            </div>
-            
             {% if note.student_understanding %}
-                <div class="note-section">
-                    <strong class="text-primary">Understanding:</strong>
-                    <span class="note-text">{{ note.student_understanding }}</span>
-                </div>
-            {% else %}
-                <div class="note-section text-muted">
-                    <em>No student understanding recorded</em>
+                <div class="note-section mb-2">
+                    <strong class="text-primary">📊 Understanding:</strong>
+                    <span class="note-text ms-2">{{ note.student_understanding }}</span>
                 </div>
             {% endif %}
             
             {% if note.topics_covered %}
-                <div class="note-section">
-                    <strong class="text-info">Topics:</strong>
-                    <span class="note-text">{{ note.topics_covered }}</span>
-                </div>
-            {% else %}
-                <div class="note-section text-muted">
-                    <em>No topics covered recorded</em>
+                <div class="note-section mb-2">
+                    <strong class="text-info">📚 Topics:</strong>
+                    <span class="note-text ms-2">{{ note.topics_covered }}</span>
                 </div>
             {% endif %}
             
             {% if note.coach_comments %}
-                <div class="note-section">
-                    <strong class="text-success">Comments:</strong>
-                    <span class="note-text">{{ note.coach_comments }}</span>
-                </div>
-            {% else %}
-                <div class="note-section text-muted">
-                    <em>No coach comments recorded</em>
+                <div class="note-section mb-2">
+                    <strong class="text-success">💬 Comments:</strong>
+                    <span class="note-text ms-2">{{ note.coach_comments }}</span>
                 </div>
             {% endif %}
         </div>
-    </div>
-{% else %}
-    <script>
-    console.warn('⚠️ _lesson_note_display.html: No note provided to template');
-    </script>
-    <div class="alert alert-warning" style="border: 2px solid #ffc107; padding: 10px; margin: 5px;">
-        <strong>🔍 DEBUG:</strong> No note data provided to display template
     </div>
 {% endif %}
 
