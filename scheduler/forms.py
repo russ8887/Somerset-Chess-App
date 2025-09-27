@@ -135,10 +135,155 @@ class LessonCSVImportForm(forms.Form):
         return csv_file
 
 class LessonNoteForm(forms.ModelForm):
+    # Predefined topic choices
+    TOPIC_CHOICES = [
+        ('opening_principles', 'Opening Principles'),
+        ('tactical_patterns', 'Tactical Patterns (Pins, Forks, Skewers)'),
+        ('endgame_basics', 'Endgame Basics'),
+        ('piece_development', 'Piece Development'),
+        ('castling_safety', 'Castling & King Safety'),
+        ('pawn_structure', 'Pawn Structure'),
+        ('time_management', 'Time Management'),
+        ('tournament_prep', 'Tournament Preparation'),
+        ('problem_solving', 'Problem Solving'),
+        ('game_analysis', 'Game Analysis'),
+        ('notation', 'Chess Notation'),
+        ('basic_rules', 'Basic Rules & Movement'),
+        ('checkmate_patterns', 'Checkmate Patterns'),
+        ('piece_values', 'Piece Values & Trading'),
+        ('center_control', 'Center Control'),
+    ]
+    
+    # Student understanding rating choices
+    UNDERSTANDING_CHOICES = [
+        ('1', '⭐ Struggling - Needs significant help'),
+        ('2', '⭐⭐ Developing - Some understanding'),
+        ('3', '⭐⭐⭐ Good - Grasps most concepts'),
+        ('4', '⭐⭐⭐⭐ Very Good - Strong understanding'),
+        ('5', '⭐⭐⭐⭐⭐ Excellent - Mastered concepts'),
+    ]
+    
+    # Enhanced fields with predefined options
+    topics_covered_choices = forms.MultipleChoiceField(
+        choices=TOPIC_CHOICES,
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        required=False,
+        label="Topics Covered (select all that apply)"
+    )
+    
+    topics_covered_custom = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Additional topics or details...'}),
+        required=False,
+        label="Additional Topics"
+    )
+    
+    student_understanding_rating = forms.ChoiceField(
+        choices=UNDERSTANDING_CHOICES,
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        required=False,
+        label="Student Understanding Level"
+    )
+    
+    student_understanding_notes = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Additional notes about student understanding...'}),
+        required=False,
+        label="Understanding Notes"
+    )
+    
     class Meta:
         model = LessonNote
         fields = ['student_understanding', 'topics_covered', 'coach_comments']
         widgets = {
-            'topics_covered': forms.Textarea(attrs={'rows': 3}),
-            'coach_comments': forms.Textarea(attrs={'rows': 3}),
+            'topics_covered': forms.Textarea(attrs={'rows': 3, 'placeholder': 'Legacy field - use checkboxes above for new notes'}),
+            'coach_comments': forms.Textarea(attrs={'rows': 3, 'placeholder': 'General comments about the lesson...'}),
+            'student_understanding': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Legacy field - use rating above for new notes'}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # If editing an existing note, try to parse the data
+        if self.instance and self.instance.pk:
+            # Try to extract topics from existing data
+            existing_topics = self.instance.topics_covered or ''
+            existing_understanding = self.instance.student_understanding or ''
+            
+            # Set initial values for new fields based on existing data
+            if existing_topics:
+                # Try to match existing topics to predefined choices
+                matched_topics = []
+                for choice_value, choice_label in self.TOPIC_CHOICES:
+                    if choice_label.lower() in existing_topics.lower():
+                        matched_topics.append(choice_value)
+                
+                if matched_topics:
+                    self.fields['topics_covered_choices'].initial = matched_topics
+                else:
+                    self.fields['topics_covered_custom'].initial = existing_topics
+            
+            # Try to extract rating from existing understanding
+            if existing_understanding:
+                # Look for star ratings or numbers
+                if '⭐⭐⭐⭐⭐' in existing_understanding or '5' in existing_understanding:
+                    self.fields['student_understanding_rating'].initial = '5'
+                elif '⭐⭐⭐⭐' in existing_understanding or '4' in existing_understanding:
+                    self.fields['student_understanding_rating'].initial = '4'
+                elif '⭐⭐⭐' in existing_understanding or '3' in existing_understanding:
+                    self.fields['student_understanding_rating'].initial = '3'
+                elif '⭐⭐' in existing_understanding or '2' in existing_understanding:
+                    self.fields['student_understanding_rating'].initial = '2'
+                elif '⭐' in existing_understanding or '1' in existing_understanding:
+                    self.fields['student_understanding_rating'].initial = '1'
+                
+                self.fields['student_understanding_notes'].initial = existing_understanding
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # Combine the new structured fields with the legacy fields
+        topics_list = []
+        
+        # Add selected predefined topics
+        selected_topics = self.cleaned_data.get('topics_covered_choices', [])
+        for topic_value in selected_topics:
+            topic_label = dict(self.TOPIC_CHOICES).get(topic_value, topic_value)
+            topics_list.append(topic_label)
+        
+        # Add custom topics
+        custom_topics = self.cleaned_data.get('topics_covered_custom', '').strip()
+        if custom_topics:
+            topics_list.append(custom_topics)
+        
+        # Combine with existing topics_covered field if it has content
+        existing_topics = self.cleaned_data.get('topics_covered', '').strip()
+        if existing_topics and existing_topics not in str(topics_list):
+            topics_list.append(existing_topics)
+        
+        # Update the topics_covered field
+        instance.topics_covered = '; '.join(topics_list) if topics_list else ''
+        
+        # Combine understanding rating and notes
+        understanding_parts = []
+        
+        # Add rating
+        rating = self.cleaned_data.get('student_understanding_rating')
+        if rating:
+            rating_label = dict(self.UNDERSTANDING_CHOICES).get(rating, rating)
+            understanding_parts.append(rating_label)
+        
+        # Add understanding notes
+        understanding_notes = self.cleaned_data.get('student_understanding_notes', '').strip()
+        if understanding_notes:
+            understanding_parts.append(understanding_notes)
+        
+        # Combine with existing student_understanding field if it has content
+        existing_understanding = self.cleaned_data.get('student_understanding', '').strip()
+        if existing_understanding and existing_understanding not in str(understanding_parts):
+            understanding_parts.append(existing_understanding)
+        
+        # Update the student_understanding field
+        instance.student_understanding = '; '.join(understanding_parts) if understanding_parts else ''
+        
+        if commit:
+            instance.save()
+        return instance

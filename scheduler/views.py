@@ -1118,10 +1118,20 @@ def manage_student_availability(request, student_pk):
 @login_required
 def view_lesson_note(request, pk):
     note = get_object_or_404(LessonNote, pk=pk)
-    # This view doesn't need to pass the form, so it's fine as is,
-    # but the logic is now consistent with edit_lesson_note
-    context = _prepare_lesson_context(note.attendance_record.lesson_session)
-    return render(request, 'scheduler/_lesson_detail.html', context)
+    lesson = note.attendance_record.lesson_session
+    
+    # Check if this is an HTMX request
+    if request.headers.get('HX-Request'):
+        # Return just the note display for HTMX
+        context = {
+            'note': note,
+            'record': note.attendance_record
+        }
+        return render(request, 'scheduler/_lesson_note_display.html', context)
+    else:
+        # Return full lesson context for regular requests
+        context = _prepare_lesson_context(lesson)
+        return render(request, 'scheduler/_lesson_detail.html', context)
 
 @login_required
 def edit_lesson_note(request, pk):
