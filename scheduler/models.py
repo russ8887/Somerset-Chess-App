@@ -608,7 +608,7 @@ class LessonNote(models.Model):
         GOOD = 'GOOD', 'Good'
         NEEDS_REVIEW = 'NEEDS_REVIEW', 'Needs Review'
         
-    student_understanding = models.CharField(max_length=15, choices=Understanding.choices, blank=True)
+    student_understanding = models.CharField(max_length=500, choices=Understanding.choices, blank=True)
     topics_covered = models.TextField(blank=True, help_text="A brief summary of topics covered in the lesson.")
     coach_comments = models.TextField(blank=True, help_text="Private notes for the next lesson.")
 
