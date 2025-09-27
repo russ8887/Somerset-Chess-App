@@ -154,22 +154,20 @@ class LessonNoteForm(forms.ModelForm):
         ('center_control', 'Center Control'),
     ]
     
-    # Student understanding rating choices
+    # Student understanding rating choices (shortened to fit database field)
     UNDERSTANDING_CHOICES = [
-        ('1', '⭐ Struggling - Needs significant help'),
-        ('2', '⭐⭐ Developing - Some understanding'),
-        ('3', '⭐⭐⭐ Good - Grasps most concepts'),
-        ('4', '⭐⭐⭐⭐ Very Good - Strong understanding'),
-        ('5', '⭐⭐⭐⭐⭐ Excellent - Mastered concepts'),
+        ('1', '⭐ Struggling'),
+        ('2', '⭐⭐ Developing'),
+        ('3', '⭐⭐⭐ Good'),
+        ('4', '⭐⭐⭐⭐ Very Good'),
+        ('5', '⭐⭐⭐⭐⭐ Excellent'),
     ]
     
-    # Enhanced fields with clean dropdown approach
+    # Enhanced fields with mobile-friendly checkboxes
     topics_covered_choices = forms.MultipleChoiceField(
         choices=TOPIC_CHOICES,
-        widget=forms.SelectMultiple(attrs={
-            'class': 'form-select',
-            'style': 'height: 120px;',
-            'data-placeholder': 'Select topics covered...'
+        widget=forms.CheckboxSelectMultiple(attrs={
+            'class': 'form-check-input'
         }),
         required=False,
         label="Topics Covered"

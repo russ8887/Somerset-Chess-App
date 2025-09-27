@@ -42,26 +42,26 @@ Template for HTMX note form responses (create/edit)
             <div class="mb-4">
                 <h6 class="text-info mb-3 border-bottom pb-2">📚 Topics Covered</h6>
                 
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="{{ note_form.topics_covered_choices.id_for_label }}" class="form-label">
-                            <strong>Select Topics:</strong>
-                        </label>
-                        <small class="text-muted d-block mb-2">Hold Ctrl/Cmd to select multiple</small>
+                <div class="mb-3">
+                    <label class="form-label">
+                        <strong>Select Topics (check all that apply):</strong>
+                    </label>
+                    <div class="topics-checkbox-grid">
                         {{ note_form.topics_covered_choices }}
-                        {% if note_form.topics_covered_choices.errors %}
-                            <div class="text-danger small">{{ note_form.topics_covered_choices.errors }}</div>
-                        {% endif %}
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="{{ note_form.topics_covered_custom.id_for_label }}" class="form-label">
-                            <strong>Additional Topics:</strong>
-                        </label>
-                        {{ note_form.topics_covered_custom }}
-                        {% if note_form.topics_covered_custom.errors %}
-                            <div class="text-danger small">{{ note_form.topics_covered_custom.errors }}</div>
-                        {% endif %}
-                    </div>
+                    {% if note_form.topics_covered_choices.errors %}
+                        <div class="text-danger small">{{ note_form.topics_covered_choices.errors }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-3">
+                    <label for="{{ note_form.topics_covered_custom.id_for_label }}" class="form-label">
+                        <strong>Additional Topics:</strong>
+                    </label>
+                    {{ note_form.topics_covered_custom }}
+                    {% if note_form.topics_covered_custom.errors %}
+                        <div class="text-danger small">{{ note_form.topics_covered_custom.errors }}</div>
+                    {% endif %}
                 </div>
             </div>
             
