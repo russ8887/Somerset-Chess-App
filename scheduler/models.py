@@ -523,7 +523,28 @@ class LessonSession(models.Model):
     status = models.CharField(max_length=10, choices=Status.choices, default='SCHEDULED')
 
     def get_attendance_records(self):
-        return self.attendancerecord_set.select_related('enrollment__student__school_class').prefetch_related('lessonnote').all()
+        """
+        DYNAMIC ROSTER GENERATION: Always returns attendance records based on 
+        CURRENT group membership, creating records on-demand if needed.
+        This ensures rosters always match current ScheduledGroup.members.
+        """
+        current_members = self.scheduled_group.members.all()
+        records = []
+        
+        for enrollment in current_members:
+            # Get or create attendance record for this student on this lesson date
+            # This preserves existing attendance data while ensuring current members appear
+            record, created = AttendanceRecord.objects.get_or_create(
+                lesson_session=self,
+                enrollment=enrollment,
+                defaults={'status': 'PENDING'}
+            )
+            records.append(record)
+        
+        # Prefetch related data for performance
+        return AttendanceRecord.objects.filter(
+            id__in=[r.id for r in records]
+        ).select_related('enrollment__student__school_class').prefetch_related('lessonnote')
 
     def __str__(self):
         return f"{self.scheduled_group.name} on {self.lesson_date}"
