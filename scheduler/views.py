@@ -5,7 +5,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
-from django.db.models import Exists, OuterRef, Count, Q, F
+from django.db.models import Exists, OuterRef, Count, Q, F, Avg, Max, Min, Case, When, Value, FloatField
 from django.db import transaction
 from datetime import date, timedelta
 
@@ -16,7 +16,6 @@ from .models import (
 from .forms import LessonNoteForm
 from .slot_finder import find_better_slot, EnhancedSlotFinderEngine
 from django.http import JsonResponse
-from django.db.models import Avg, Max, Min
 import json
 
 def _prepare_lesson_context(lesson, editing_note_id=None, request=None):
@@ -1176,56 +1175,87 @@ def analytics_dashboard(request):
     if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach) and not request.user.is_staff:
         return redirect('dashboard')
     
-    # Get current term
-    current_term = Term.get_active_term()
-    if not current_term:
-        return render(request, 'scheduler/analytics_dashboard.html', {
-            'error': 'No active term found. Please contact an administrator.'
-        })
-    
-    # Date range filtering
-    start_date = request.GET.get('start_date')
-    end_date = request.GET.get('end_date')
-    
-    if start_date:
-        try:
-            start_date = date.fromisoformat(start_date)
-        except ValueError:
+    try:
+        # Get current term
+        current_term = Term.get_active_term()
+        if not current_term:
+            return render(request, 'scheduler/analytics_dashboard.html', {
+                'error': 'No active term found. Please contact an administrator.'
+            })
+        
+        # Date range filtering
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        
+        if start_date:
+            try:
+                start_date = date.fromisoformat(start_date)
+            except ValueError:
+                start_date = current_term.start_date
+        else:
             start_date = current_term.start_date
-    else:
-        start_date = current_term.start_date
-    
-    if end_date:
-        try:
-            end_date = date.fromisoformat(end_date)
-        except ValueError:
+        
+        if end_date:
+            try:
+                end_date = date.fromisoformat(end_date)
+            except ValueError:
+                end_date = current_term.end_date
+        else:
             end_date = current_term.end_date
-    else:
-        end_date = current_term.end_date
-    
-    # Student Progress Analytics
-    student_analytics = _get_student_analytics(current_term, start_date, end_date)
-    
-    # Coach Performance Metrics
-    coach_analytics = _get_coach_analytics(current_term, start_date, end_date)
-    
-    # System Utilization Insights
-    utilization_analytics = _get_utilization_analytics(current_term, start_date, end_date)
-    
-    # Attendance Pattern Analysis
-    attendance_analytics = _get_attendance_analytics(current_term, start_date, end_date)
-    
-    context = {
-        'current_term': current_term,
-        'start_date': start_date,
-        'end_date': end_date,
-        'student_analytics': student_analytics,
-        'coach_analytics': coach_analytics,
-        'utilization_analytics': utilization_analytics,
-        'attendance_analytics': attendance_analytics,
-    }
-    
-    return render(request, 'scheduler/analytics_dashboard.html', context)
+        
+        # Student Progress Analytics
+        try:
+            student_analytics = _get_student_analytics(current_term, start_date, end_date)
+        except Exception as e:
+            student_analytics = {
+                'total_students': 0, 'students_behind': 0, 'students_on_track': 0,
+                'students_ahead': 0, 'lesson_balances': [], 'skill_distribution': [],
+                'avg_attendance_rate': 0, 'error': f'Student analytics error: {str(e)}'
+            }
+        
+        # Coach Performance Metrics
+        try:
+            coach_analytics = _get_coach_analytics(current_term, start_date, end_date)
+        except Exception as e:
+            coach_analytics = []
+        
+        # System Utilization Insights
+        try:
+            utilization_analytics = _get_utilization_analytics(current_term, start_date, end_date)
+        except Exception as e:
+            utilization_analytics = {
+                'time_slot_utilization': [], 'day_utilization': [],
+                'group_type_distribution': [], 'capacity_stats': {
+                    'underutilized': 0, 'optimal': 0, 'full': 0, 'total': 0
+                }
+            }
+        
+        # Attendance Pattern Analysis
+        try:
+            attendance_analytics = _get_attendance_analytics(current_term, start_date, end_date)
+        except Exception as e:
+            attendance_analytics = {
+                'total_records': 0, 'attendance_breakdown': [], 'absence_reasons': [],
+                'weekly_trends': [], 'overall_attendance_rate': 0
+            }
+        
+        context = {
+            'current_term': current_term,
+            'start_date': start_date,
+            'end_date': end_date,
+            'student_analytics': student_analytics,
+            'coach_analytics': coach_analytics,
+            'utilization_analytics': utilization_analytics,
+            'attendance_analytics': attendance_analytics,
+        }
+        
+        return render(request, 'scheduler/analytics_dashboard.html', context)
+        
+    except Exception as e:
+        # Catch-all error handler
+        return render(request, 'scheduler/analytics_dashboard.html', {
+            'error': f'Analytics dashboard error: {str(e)}. Please contact an administrator.'
+        })
 
 
 def _get_student_analytics(term, start_date, end_date):
@@ -1277,6 +1307,18 @@ def _get_student_analytics(term, start_date, end_date):
         count=Count('id')
     ).order_by('skill_level')
     
+    # Calculate safe average attendance rate (avoiding division by zero)
+    enrollments_with_rates = enrollments.annotate(
+        attendance_rate=Case(
+            When(total_lessons=0, then=Value(0.0)),
+            default=F('attended_lessons') * 100.0 / F('total_lessons'),
+            output_field=FloatField()
+        )
+    )
+    avg_attendance_rate = enrollments_with_rates.aggregate(
+        avg_rate=Avg('attendance_rate')
+    )['avg_rate'] or 0
+    
     return {
         'total_students': enrollments.count(),
         'students_behind': students_behind,
@@ -1284,9 +1326,7 @@ def _get_student_analytics(term, start_date, end_date):
         'students_ahead': students_ahead,
         'lesson_balances': lesson_balances[:20],  # Top 20 for display
         'skill_distribution': list(skill_distribution),
-        'avg_attendance_rate': enrollments.aggregate(
-            avg_rate=Avg(F('attended_lessons') * 100.0 / F('total_lessons'))
-        )['avg_rate'] or 0
+        'avg_attendance_rate': round(avg_attendance_rate, 1)
     }
 
 
