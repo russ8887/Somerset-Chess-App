@@ -155,7 +155,7 @@
                             <tbody>
                                 {% for balance in student_analytics.lesson_balances|slice:":10" %}
                                 <tr>
-                                    <td>{{ balance.student.first_name }} {{ balance.student.last_name }}</td>
+                                    <td>{{ balance.student.name }}</td>
                                     <td>
                                         <span class="badge bg-{% if balance.balance > 3 %}danger{% elif balance.balance > 1 %}warning{% else %}success{% endif %}">
                                             {{ balance.balance }}

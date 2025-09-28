@@ -1285,7 +1285,11 @@ def _get_student_analytics(term, start_date, end_date):
     for enrollment in enrollments:
         balance = enrollment.get_lesson_balance()
         lesson_balances.append({
-            'student': enrollment.student,
+            'student': {
+                'id': enrollment.student.id,
+                'name': f"{enrollment.student.first_name} {enrollment.student.last_name}",
+                'skill_level': enrollment.student.skill_level
+            },
             'balance': balance,
             'attended': enrollment.attended_lessons,
             'total': enrollment.total_lessons,
