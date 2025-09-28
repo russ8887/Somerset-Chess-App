@@ -64,10 +64,53 @@ class StudentAdmin(admin.ModelAdmin):
 # --- Configuration for the Scheduled Group Admin ---
 @admin.register(ScheduledGroup)
 class ScheduledGroupAdmin(admin.ModelAdmin):
-    list_display = ('name', 'coach', 'term', 'day_of_week', 'time_slot')
+    list_display = ('name', 'coach', 'get_members_display', 'get_day_time_display', 'term')
     list_filter = ('term', 'coach', 'day_of_week')
     search_fields = ('name', 'coach__user__first_name', 'coach__user__last_name')
     filter_horizontal = ('members',) # Makes selecting students much easier
+    
+    def get_queryset(self, request):
+        """Optimize queries to prevent N+1 problems"""
+        return super().get_queryset(request).select_related(
+            'coach__user', 'term', 'time_slot'
+        ).prefetch_related(
+            'members__student__school_class'
+        )
+    
+    @admin.display(description='Members', ordering='members__student__last_name')
+    def get_members_display(self, obj):
+        """Display group members with capacity info"""
+        members = obj.members.all()
+        member_count = len(members)
+        
+        if member_count == 0:
+            return f"Empty (0/{obj.max_capacity})"
+        
+        # Show first few students, then count if more
+        member_names = []
+        for member in members[:3]:  # Show first 3 students
+            student = member.student
+            member_names.append(f"{student.first_name} {student.last_name}")
+        
+        if member_count > 3:
+            member_names.append(f"(+{member_count - 3} more)")
+        
+        members_text = ", ".join(member_names)
+        capacity_text = f"({member_count}/{obj.max_capacity})"
+        
+        return f"{members_text} {capacity_text}"
+    
+    @admin.display(description='Schedule', ordering='day_of_week')
+    def get_day_time_display(self, obj):
+        """Display day and time in a compact format"""
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        day_name = day_names[obj.day_of_week] if obj.day_of_week < len(day_names) else f'Day {obj.day_of_week}'
+        
+        if obj.time_slot:
+            time_str = obj.time_slot.start_time.strftime('%I:%M %p')
+            return f"{day_name} {time_str}"
+        else:
+            return f"{day_name} (No time set)"
     
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
