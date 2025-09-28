@@ -11,7 +11,7 @@
             </a>
         </div>
         <ul class="list-group list-group-flush">
-            {% for record in lesson.attendancerecord_set.all %}
+            {% for record in lesson.get_attendance_records %}
             <li class="list-group-item{% if record.has_conflict %} border-danger border-2{% endif %}" id="student-row-{{ record.pk }}">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="d-flex align-items-center gap-2">
