@@ -795,13 +795,13 @@ class SlotFinderEngine:
                 # ENHANCED: Allow displacement if new student is better OR if displaced student has good alternatives
                 displaced_alternatives = self._find_direct_placements(weakest_student)
                 
-                # More lenient displacement criteria
+                # VERY AGGRESSIVE displacement criteria
                 should_displace = (
-                    new_student_score['total_score'] >= weakest_score - 30 or  # Allow moderate downgrades
-                    (len(displaced_alternatives) > 0 and 
-                     max(displaced_alternatives, key=lambda x: x.score).score >= weakest_score - 20)
+                    new_student_score['total_score'] >= weakest_score - 50 or  # Allow major downgrades
+                    len(displaced_alternatives) > 0  # Any alternative is acceptable
                 )
                 
+                # AGGRESSIVE: Create displacement even with limited alternatives
                 if should_displace and len(displaced_alternatives) > 0:
                     best_alternative = max(displaced_alternatives, key=lambda x: x.score)
                     
