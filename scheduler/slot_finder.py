@@ -546,7 +546,7 @@ class SlotFinderEngine:
         return recommendations
     
     def _find_single_swaps(self, student: Student) -> List[SlotRecommendation]:
-        """Find single swap opportunities with AGGRESSIVE displacement from full groups"""
+        """Find single swap opportunities with ENHANCED displacement from full groups"""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -563,12 +563,12 @@ class SlotFinderEngine:
         except Enrollment.DoesNotExist:
             return recommendations  # Can't swap if no enrollment
         
-        logger.info(f"🔄 AGGRESSIVE SWAP SEARCH for {student.first_name} ({student_enrollment_type})")
+        logger.info(f"🔄 ENHANCED DISPLACEMENT SEARCH for {student.first_name} ({student_enrollment_type})")
         
         # Get student's available time slots
         available_slots = self.availability_checker.get_available_slots(student)
         
-        # Look for groups where we could swap with existing students of same type
+        # Look for groups where we could displace existing students
         for day, time_slot in available_slots:
             groups_at_time = ScheduledGroup.objects.filter(
                 term=current_term,
@@ -577,126 +577,65 @@ class SlotFinderEngine:
             ).select_related('coach').prefetch_related('members__student')
             
             for group in groups_at_time:
-                # Only consider groups of compatible type
-                if not self.compatibility_scorer._is_group_type_compatible(student_enrollment_type, group.group_type):
-                    continue
-                
-                # AGGRESSIVE: Force displacement from full compatible groups
                 effective_group_type = self._get_effective_group_type(group, current_term)
                 current_size = group.get_current_size()
                 
-                logger.info(f"   🎯 Targeting {group.name} ({effective_group_type}, {current_size} students)")
+                logger.info(f"   🎯 Analyzing {group.name} ({effective_group_type}, {current_size} students)")
                 
-                # For PAIR students targeting PAIR_FULL groups - FORCE displacement
-                if (student_enrollment_type == 'PAIR' and 
-                    effective_group_type == 'PAIR_FULL' and 
-                    current_size == 2):
+                # ENHANCED DISPLACEMENT LOGIC - Handle all group types
+                displacement_opportunities = self._find_displacement_opportunities(
+                    student, student_enrollment_type, group, effective_group_type, current_size
+                )
+                
+                for opportunity in displacement_opportunities:
+                    recommendations.append(opportunity)
+                    logger.info(f"   ✅ DISPLACEMENT OPPORTUNITY: {opportunity.placement_type}")
+                
+                # Also check regular swaps for compatible groups
+                if self._is_student_compatible_with_effective_group_type(
+                    student_enrollment_type, effective_group_type, current_size
+                ):
                     
-                    logger.info(f"   💥 FORCING displacement from PAIR_FULL group")
-                    
-                    # Find the weaker fit of the 2 current students
-                    current_students = []
                     for member in group.members.all():
                         existing_student = member.student
-                        if existing_student.id != student.id:
-                            score = self.compatibility_scorer.calculate_compatibility_score(
-                                existing_student, group, group.coach
+                        
+                        # Skip if it's the same student
+                        if existing_student.id == student.id:
+                            continue
+                        
+                        # Get displaced student's enrollment type
+                        try:
+                            displaced_enrollment = existing_student.enrollment_set.get(term=current_term)
+                            displaced_enrollment_type = displaced_enrollment.enrollment_type
+                        except Enrollment.DoesNotExist:
+                            continue  # Skip if no enrollment for displaced student
+                        
+                        # Only swap with compatible enrollment types
+                        if not self.compatibility_scorer._is_enrollment_type_compatible(student_enrollment_type, displaced_enrollment_type):
+                            continue
+                        
+                        # Check if swapping would benefit both students
+                        swap_benefit = self._evaluate_swap_benefit(
+                            student, existing_student, group
+                        )
+                        
+                        if swap_benefit['beneficial']:
+                            recommendation = SlotRecommendation(
+                                group=group,
+                                score=swap_benefit['total_score'],
+                                placement_type='swap',
+                                swap_chain=[{
+                                    'student_in': student,
+                                    'student_out': existing_student,
+                                    'group': group,
+                                    'benefit_score': swap_benefit['benefit_score'],
+                                    'enrollment_type': student_enrollment_type
+                                }],
+                                benefits=swap_benefit
                             )
-                            current_students.append((existing_student, score['total_score']))
-                    
-                    if len(current_students) >= 1:
-                        # Sort by score - displace the weakest fit
-                        current_students.sort(key=lambda x: x[1])
-                        weakest_student, weakest_score = current_students[0]
-                        
-                        logger.info(f"   👤 Weakest fit: {weakest_student.first_name} (score: {weakest_score})")
-                        
-                        # Calculate new student's score
-                        new_student_score = self.compatibility_scorer.calculate_compatibility_score(
-                            student, group, group.coach
-                        )
-                        
-                        logger.info(f"   🆚 New student score: {new_student_score['total_score']} vs {weakest_score}")
-                        
-                        # AGGRESSIVE: Allow displacement even if only slightly better
-                        if new_student_score['total_score'] >= weakest_score - 20:  # Very lenient
-                            
-                            # Check if displaced student has alternatives
-                            displaced_alternatives = self._find_direct_placements(weakest_student)
-                            
-                            logger.info(f"   🔍 Displaced student has {len(displaced_alternatives)} alternatives")
-                            
-                            # AGGRESSIVE: Create displacement even with limited alternatives
-                            if len(displaced_alternatives) > 0:
-                                best_alternative = max(displaced_alternatives, key=lambda x: x.score)
-                                
-                                recommendation = SlotRecommendation(
-                                    group=group,
-                                    score=new_student_score['total_score'],
-                                    placement_type='aggressive_displacement',
-                                    swap_chain=[{
-                                        'student_in': student,
-                                        'student_out': weakest_student,
-                                        'group': group,
-                                        'benefit_score': new_student_score['total_score'] - weakest_score,
-                                        'enrollment_type': student_enrollment_type,
-                                        'displacement_reason': f'Forced displacement from PAIR_FULL group',
-                                        'alternative_placement': best_alternative.group.name,
-                                        'alternative_score': best_alternative.score
-                                    }],
-                                    benefits={
-                                        'displacement_type': 'AGGRESSIVE_PAIR_FULL',
-                                        'new_student_score': new_student_score['total_score'],
-                                        'displaced_student_score': weakest_score,
-                                        'benefit_score': new_student_score['total_score'] - weakest_score,
-                                        'displaced_alternatives': len(displaced_alternatives),
-                                        'best_alternative_score': best_alternative.score
-                                    }
-                                )
-                                recommendations.append(recommendation)
-                                logger.info(f"   ✅ AGGRESSIVE DISPLACEMENT CREATED!")
-                
-                # Also check regular swaps for non-full groups
-                for member in group.members.all():
-                    existing_student = member.student
-                    
-                    # Skip if it's the same student
-                    if existing_student.id == student.id:
-                        continue
-                    
-                    # Get displaced student's enrollment type
-                    try:
-                        displaced_enrollment = existing_student.enrollment_set.get(term=current_term)
-                        displaced_enrollment_type = displaced_enrollment.enrollment_type
-                    except Enrollment.DoesNotExist:
-                        continue  # Skip if no enrollment for displaced student
-                    
-                    # Only swap with same type students (except GROUP can swap with PAIR)
-                    if not self.compatibility_scorer._is_enrollment_type_compatible(student_enrollment_type, displaced_enrollment_type):
-                        continue
-                    
-                    # Check if swapping would benefit both students
-                    swap_benefit = self._evaluate_swap_benefit(
-                        student, existing_student, group
-                    )
-                    
-                    if swap_benefit['beneficial']:
-                        recommendation = SlotRecommendation(
-                            group=group,
-                            score=swap_benefit['total_score'],
-                            placement_type='swap',
-                            swap_chain=[{
-                                'student_in': student,
-                                'student_out': existing_student,
-                                'group': group,
-                                'benefit_score': swap_benefit['benefit_score'],
-                                'enrollment_type': student_enrollment_type
-                            }],
-                            benefits=swap_benefit
-                        )
-                        recommendations.append(recommendation)
+                            recommendations.append(recommendation)
         
-        logger.info(f"🔄 AGGRESSIVE SWAP SEARCH found {len(recommendations)} displacement options")
+        logger.info(f"🔄 ENHANCED DISPLACEMENT SEARCH found {len(recommendations)} options")
         return recommendations
     
     def _evaluate_swap_benefit(
@@ -803,6 +742,275 @@ class SlotFinderEngine:
             return effective_group_type in ['EMPTY', 'GROUP', 'PAIR_WAITING']
         
         return False
+    
+    def _find_displacement_opportunities(
+        self, 
+        student: Student, 
+        student_enrollment_type: str, 
+        group: ScheduledGroup, 
+        effective_group_type: str, 
+        current_size: int
+    ) -> List[SlotRecommendation]:
+        """Find displacement opportunities for all group types with enhanced logic"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        opportunities = []
+        current_term = Term.get_active_term()
+        
+        if not current_term:
+            return opportunities
+        
+        logger.info(f"   🔍 DISPLACEMENT ANALYSIS: {student_enrollment_type} student targeting {effective_group_type} group")
+        
+        # ENHANCED DISPLACEMENT LOGIC FOR ALL GROUP TYPES
+        
+        # 1. PAIR students targeting PAIR_FULL groups (2 PAIR students)
+        if (student_enrollment_type == 'PAIR' and 
+            effective_group_type == 'PAIR_FULL' and 
+            current_size == 2):
+            
+            logger.info(f"   💥 PAIR→PAIR_FULL displacement analysis")
+            
+            # Find the weaker fit of the 2 current students
+            current_students = []
+            for member in group.members.all():
+                existing_student = member.student
+                if existing_student.id != student.id:
+                    score = self.compatibility_scorer.calculate_compatibility_score(
+                        existing_student, group, group.coach
+                    )
+                    current_students.append((existing_student, score['total_score']))
+            
+            if len(current_students) >= 1:
+                # Sort by score - displace the weakest fit
+                current_students.sort(key=lambda x: x[1])
+                weakest_student, weakest_score = current_students[0]
+                
+                # Calculate new student's score
+                new_student_score = self.compatibility_scorer.calculate_compatibility_score(
+                    student, group, group.coach
+                )
+                
+                # ENHANCED: Allow displacement if new student is better OR if displaced student has good alternatives
+                displaced_alternatives = self._find_direct_placements(weakest_student)
+                
+                # More lenient displacement criteria
+                should_displace = (
+                    new_student_score['total_score'] >= weakest_score - 30 or  # Allow moderate downgrades
+                    (len(displaced_alternatives) > 0 and 
+                     max(displaced_alternatives, key=lambda x: x.score).score >= weakest_score - 20)
+                )
+                
+                if should_displace and len(displaced_alternatives) > 0:
+                    best_alternative = max(displaced_alternatives, key=lambda x: x.score)
+                    
+                    opportunity = SlotRecommendation(
+                        group=group,
+                        score=new_student_score['total_score'],
+                        placement_type='pair_displacement',
+                        swap_chain=[{
+                            'student_in': student,
+                            'student_out': weakest_student,
+                            'group': group,
+                            'benefit_score': new_student_score['total_score'] - weakest_score,
+                            'enrollment_type': student_enrollment_type,
+                            'displacement_reason': f'PAIR displacement from PAIR_FULL group',
+                            'alternative_placement': best_alternative.group.name,
+                            'alternative_score': best_alternative.score
+                        }],
+                        benefits={
+                            'displacement_type': 'PAIR_FULL_DISPLACEMENT',
+                            'new_student_score': new_student_score['total_score'],
+                            'displaced_student_score': weakest_score,
+                            'benefit_score': new_student_score['total_score'] - weakest_score,
+                            'displaced_alternatives': len(displaced_alternatives),
+                            'best_alternative_score': best_alternative.score
+                        }
+                    )
+                    opportunities.append(opportunity)
+                    logger.info(f"   ✅ PAIR_FULL displacement created!")
+        
+        # 2. GROUP students targeting PAIR_WAITING groups (1 PAIR student)
+        elif (student_enrollment_type == 'GROUP' and 
+              effective_group_type == 'PAIR_WAITING' and 
+              current_size == 1):
+            
+            logger.info(f"   💥 GROUP→PAIR_WAITING displacement analysis")
+            
+            # Get the single PAIR student
+            pair_student = None
+            for member in group.members.all():
+                if member.student.id != student.id:
+                    pair_student = member.student
+                    break
+            
+            if pair_student:
+                # Find alternatives for the PAIR student
+                pair_alternatives = self._find_direct_placements(pair_student)
+                
+                # Calculate scores
+                pair_current_score = self.compatibility_scorer.calculate_compatibility_score(
+                    pair_student, group, group.coach
+                )
+                group_new_score = self.compatibility_scorer.calculate_compatibility_score(
+                    student, group, group.coach
+                )
+                
+                # Allow displacement if GROUP student fits well and PAIR student has alternatives
+                if (len(pair_alternatives) > 0 and 
+                    group_new_score['total_score'] >= pair_current_score['total_score'] - 40):
+                    
+                    best_alternative = max(pair_alternatives, key=lambda x: x.score)
+                    
+                    opportunity = SlotRecommendation(
+                        group=group,
+                        score=group_new_score['total_score'],
+                        placement_type='group_pair_displacement',
+                        swap_chain=[{
+                            'student_in': student,
+                            'student_out': pair_student,
+                            'group': group,
+                            'benefit_score': group_new_score['total_score'] - pair_current_score['total_score'],
+                            'enrollment_type': student_enrollment_type,
+                            'displacement_reason': f'GROUP displacing PAIR_WAITING student',
+                            'alternative_placement': best_alternative.group.name,
+                            'alternative_score': best_alternative.score
+                        }],
+                        benefits={
+                            'displacement_type': 'GROUP_PAIR_WAITING_DISPLACEMENT',
+                            'new_student_score': group_new_score['total_score'],
+                            'displaced_student_score': pair_current_score['total_score'],
+                            'benefit_score': group_new_score['total_score'] - pair_current_score['total_score'],
+                            'displaced_alternatives': len(pair_alternatives),
+                            'best_alternative_score': best_alternative.score
+                        }
+                    )
+                    opportunities.append(opportunity)
+                    logger.info(f"   ✅ GROUP→PAIR_WAITING displacement created!")
+        
+        # 3. GROUP students targeting full GROUP groups
+        elif (student_enrollment_type == 'GROUP' and 
+              effective_group_type == 'GROUP' and 
+              current_size >= group.max_capacity):
+            
+            logger.info(f"   💥 GROUP→GROUP_FULL displacement analysis")
+            
+            # Find the weakest fit in the full GROUP
+            current_students = []
+            for member in group.members.all():
+                existing_student = member.student
+                if existing_student.id != student.id:
+                    score = self.compatibility_scorer.calculate_compatibility_score(
+                        existing_student, group, group.coach
+                    )
+                    current_students.append((existing_student, score['total_score']))
+            
+            if len(current_students) >= 1:
+                # Sort by score - displace the weakest fit
+                current_students.sort(key=lambda x: x[1])
+                weakest_student, weakest_score = current_students[0]
+                
+                # Calculate new student's score
+                new_student_score = self.compatibility_scorer.calculate_compatibility_score(
+                    student, group, group.coach
+                )
+                
+                # Find alternatives for displaced student
+                displaced_alternatives = self._find_direct_placements(weakest_student)
+                
+                # Allow displacement if new student is significantly better
+                if (new_student_score['total_score'] > weakest_score + 20 and 
+                    len(displaced_alternatives) > 0):
+                    
+                    best_alternative = max(displaced_alternatives, key=lambda x: x.score)
+                    
+                    opportunity = SlotRecommendation(
+                        group=group,
+                        score=new_student_score['total_score'],
+                        placement_type='group_displacement',
+                        swap_chain=[{
+                            'student_in': student,
+                            'student_out': weakest_student,
+                            'group': group,
+                            'benefit_score': new_student_score['total_score'] - weakest_score,
+                            'enrollment_type': student_enrollment_type,
+                            'displacement_reason': f'GROUP displacing weaker GROUP student',
+                            'alternative_placement': best_alternative.group.name,
+                            'alternative_score': best_alternative.score
+                        }],
+                        benefits={
+                            'displacement_type': 'GROUP_FULL_DISPLACEMENT',
+                            'new_student_score': new_student_score['total_score'],
+                            'displaced_student_score': weakest_score,
+                            'benefit_score': new_student_score['total_score'] - weakest_score,
+                            'displaced_alternatives': len(displaced_alternatives),
+                            'best_alternative_score': best_alternative.score
+                        }
+                    )
+                    opportunities.append(opportunity)
+                    logger.info(f"   ✅ GROUP_FULL displacement created!")
+        
+        # 4. SOLO students targeting SOLO_OCCUPIED groups
+        elif (student_enrollment_type == 'SOLO' and 
+              effective_group_type == 'SOLO_OCCUPIED' and 
+              current_size == 1):
+            
+            logger.info(f"   💥 SOLO→SOLO_OCCUPIED displacement analysis")
+            
+            # Get the current SOLO student
+            current_solo_student = None
+            for member in group.members.all():
+                if member.student.id != student.id:
+                    current_solo_student = member.student
+                    break
+            
+            if current_solo_student:
+                # Calculate scores
+                current_score = self.compatibility_scorer.calculate_compatibility_score(
+                    current_solo_student, group, group.coach
+                )
+                new_score = self.compatibility_scorer.calculate_compatibility_score(
+                    student, group, group.coach
+                )
+                
+                # Find alternatives for current student
+                displaced_alternatives = self._find_direct_placements(current_solo_student)
+                
+                # Allow displacement if new student is better and displaced has alternatives
+                if (new_score['total_score'] > current_score['total_score'] + 10 and 
+                    len(displaced_alternatives) > 0):
+                    
+                    best_alternative = max(displaced_alternatives, key=lambda x: x.score)
+                    
+                    opportunity = SlotRecommendation(
+                        group=group,
+                        score=new_score['total_score'],
+                        placement_type='solo_displacement',
+                        swap_chain=[{
+                            'student_in': student,
+                            'student_out': current_solo_student,
+                            'group': group,
+                            'benefit_score': new_score['total_score'] - current_score['total_score'],
+                            'enrollment_type': student_enrollment_type,
+                            'displacement_reason': f'SOLO displacing current SOLO student',
+                            'alternative_placement': best_alternative.group.name,
+                            'alternative_score': best_alternative.score
+                        }],
+                        benefits={
+                            'displacement_type': 'SOLO_OCCUPIED_DISPLACEMENT',
+                            'new_student_score': new_score['total_score'],
+                            'displaced_student_score': current_score['total_score'],
+                            'benefit_score': new_score['total_score'] - current_score['total_score'],
+                            'displaced_alternatives': len(displaced_alternatives),
+                            'best_alternative_score': best_alternative.score
+                        }
+                    )
+                    opportunities.append(opportunity)
+                    logger.info(f"   ✅ SOLO_OCCUPIED displacement created!")
+        
+        logger.info(f"   📊 Found {len(opportunities)} displacement opportunities")
+        return opportunities
     
     def _rank_recommendations(self, recommendations: List[SlotRecommendation]) -> List[SlotRecommendation]:
         """Rank recommendations by score and other factors"""
