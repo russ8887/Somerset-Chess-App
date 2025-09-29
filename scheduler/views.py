@@ -657,37 +657,49 @@ def find_better_slot_api(request, student_id):
             
         logger.info(f"🎯 PostgreSQL found {len(results)} recommendations")
         
-        # Convert PostgreSQL results to JSON-serializable format
+        # Convert PostgreSQL results to JSON-serializable format with enhanced details
         for row in results:
-            (slot_id, group_id, group_name, coach_name, day_name, time_slot,
-             compatibility_score, placement_type, current_size, max_capacity,
-             displacement_info, explanation, feasibility_score) = row
-            
-            rec_data = {
-                'group_name': group_name,
-                'group_id': group_id,
-                'score': compatibility_score,
-                'percentage': int((compatibility_score / 370) * 100),
-                'placement_type': placement_type,
-                'day_name': day_name,
-                'time_slot': time_slot,
-                'coach_name': coach_name,
-                'current_size': current_size,
-                'max_capacity': max_capacity,
-                'explanation': explanation,
-                'feasibility_score': feasibility_score,
-                'displacement_info': displacement_info,
-            }
-            
-            # Add placement-specific data from displacement_info
-            if displacement_info:
-                if displacement_info.get('type') == 'displacement':
-                    displaced_student = displacement_info.get('displaced_student')
-                    if displaced_student:
-                        rec_data['displaced_student'] = displaced_student
-                        rec_data['complexity'] = displacement_info.get('complexity', 1)
-            
-            postgresql_recommendations.append(rec_data)
+                    (slot_id, group_id, group_name, coach_name, day_name, time_slot,
+                     compatibility_score, placement_type, current_size, max_capacity,
+                     displacement_info, explanation, feasibility_score) = row
+                    
+                    # Get current students in this group for enhanced display
+                    try:
+                        group = ScheduledGroup.objects.get(id=group_id)
+                        current_students = _get_current_students_info(group, active_term)
+                    except ScheduledGroup.DoesNotExist:
+                        current_students = []
+                    
+                    rec_data = {
+                        'group_name': group_name,
+                        'group_id': group_id,
+                        'score': compatibility_score,
+                        'percentage': int((compatibility_score / 370) * 100),
+                        'placement_type': placement_type,
+                        'day_name': day_name,
+                        'time_slot': time_slot,
+                        'coach_name': coach_name,
+                        'current_size': current_size,
+                        'max_capacity': max_capacity,
+                        'explanation': explanation,
+                        'feasibility_score': feasibility_score,
+                        'displacement_info': displacement_info,
+                        'current_students': current_students,
+                        'current_students_display': _format_students_display(current_students),
+                    }
+                    
+                    # Add placement-specific data from displacement_info
+                    if displacement_info:
+                        if displacement_info.get('type') == 'displacement':
+                            displaced_student = displacement_info.get('displaced_student')
+                            if displaced_student:
+                                rec_data['displaced_student'] = displaced_student
+                                rec_data['complexity'] = displacement_info.get('complexity', 1)
+                                rec_data['displacement_explanation'] = _format_displacement_explanation(
+                                    displaced_student, current_students
+                                )
+                    
+                    postgresql_recommendations.append(rec_data)
         
         # PHASE 2: Python Swap Chain Engine (if we have time and want more options)
         python_recommendations = []
@@ -1094,6 +1106,46 @@ def execute_slot_move_api(request, student_id):
             
     except Exception as e:
         return JsonResponse({'success': False, 'error': f'Move failed: {str(e)}'})
+
+
+def _get_current_students_info(group, term):
+    """Get current students in a group with their details"""
+    current_students = []
+    for member in group.members.filter(term=term):
+        student = member.student
+        current_students.append({
+            'id': student.id,
+            'name': f"{student.first_name} {student.last_name}",
+            'skill_level': student.skill_level,
+            'year_level': student.year_level,
+            'enrollment_type': member.enrollment_type
+        })
+    return current_students
+
+
+def _format_students_display(current_students):
+    """Format current students for display"""
+    if not current_students:
+        return "Empty group"
+    
+    student_names = []
+    for student in current_students:
+        name_with_skill = f"{student['name']} (Skill {student['skill_level']})"
+        student_names.append(name_with_skill)
+    
+    return ", ".join(student_names)
+
+
+def _format_displacement_explanation(displaced_student, current_students):
+    """Format displacement explanation"""
+    if not displaced_student:
+        return ""
+    
+    displaced_name = displaced_student.get('name', 'Unknown Student')
+    alternative = displaced_student.get('alternative_placement', 'another group')
+    
+    return f"Would displace {displaced_name} to {alternative}"
+
 
 @login_required
 def manage_student_availability(request, student_pk):
