@@ -620,14 +620,28 @@ class SlotFinderEngine:
                         )
                         
                         if swap_benefit['beneficial']:
+                            # Convert Student objects to JSON-serializable dictionaries
                             recommendation = SlotRecommendation(
                                 group=group,
                                 score=swap_benefit['total_score'],
                                 placement_type='swap',
                                 swap_chain=[{
-                                    'student_in': student,
-                                    'student_out': existing_student,
-                                    'group': group,
+                                    'student_in': {
+                                        'id': student.id,
+                                        'name': f"{student.first_name} {student.last_name}",
+                                        'enrollment_type': student_enrollment_type
+                                    },
+                                    'student_out': {
+                                        'id': existing_student.id,
+                                        'name': f"{existing_student.first_name} {existing_student.last_name}",
+                                        'enrollment_type': displaced_enrollment_type
+                                    },
+                                    'group': {
+                                        'id': group.id,
+                                        'name': group.name,
+                                        'time_slot': str(group.time_slot),
+                                        'day_of_week': group.day_of_week
+                                    },
                                     'benefit_score': swap_benefit['benefit_score'],
                                     'enrollment_type': student_enrollment_type
                                 }],
