@@ -735,15 +735,41 @@ def find_better_slot_api(request, student_id):
                         }
                     }
                     
-                    # Add swap/chain specific data
+                    # Add swap/chain specific data with safe attribute access
                     if rec.placement_type == 'swap' and hasattr(rec, 'swap_chain') and rec.swap_chain:
-                        rec_data['swap_chain'] = rec.swap_chain
-                        rec_data['chain_length'] = rec.swap_chain.get_chain_length() if rec.swap_chain else 1
-                        rec_data['affected_students'] = len(rec.swap_chain.get_affected_students()) if rec.swap_chain else 1
+                        # Handle both SwapChain objects and list formats
+                        if hasattr(rec.swap_chain, 'to_dict'):
+                            # SwapChain object - convert to dict
+                            rec_data['swap_chain'] = rec.swap_chain.to_dict()
+                            rec_data['chain_length'] = rec.swap_chain.get_chain_length()
+                            rec_data['affected_students'] = len(rec.swap_chain.get_affected_students())
+                        elif isinstance(rec.swap_chain, list):
+                            # List format - use as is
+                            rec_data['swap_chain'] = rec.swap_chain
+                            rec_data['chain_length'] = len(rec.swap_chain)
+                            rec_data['affected_students'] = len(set(move.get('student_id') for move in rec.swap_chain if move.get('student_id')))
+                        else:
+                            # Fallback for unknown format
+                            rec_data['swap_chain'] = rec.swap_chain
+                            rec_data['chain_length'] = 1
+                            rec_data['affected_students'] = 1
                     elif rec.placement_type == 'chain' and hasattr(rec, 'swap_chain') and rec.swap_chain:
-                        rec_data['swap_chain'] = rec.swap_chain
-                        rec_data['chain_length'] = rec.swap_chain.get_chain_length()
-                        rec_data['affected_students'] = len(rec.swap_chain.get_affected_students())
+                        # Handle both SwapChain objects and list formats
+                        if hasattr(rec.swap_chain, 'to_dict'):
+                            # SwapChain object - convert to dict
+                            rec_data['swap_chain'] = rec.swap_chain.to_dict()
+                            rec_data['chain_length'] = rec.swap_chain.get_chain_length()
+                            rec_data['affected_students'] = len(rec.swap_chain.get_affected_students())
+                        elif isinstance(rec.swap_chain, list):
+                            # List format - use as is
+                            rec_data['swap_chain'] = rec.swap_chain
+                            rec_data['chain_length'] = len(rec.swap_chain)
+                            rec_data['affected_students'] = len(set(move.get('student_id') for move in rec.swap_chain if move.get('student_id')))
+                        else:
+                            # Fallback for unknown format
+                            rec_data['swap_chain'] = rec.swap_chain
+                            rec_data['chain_length'] = 1
+                            rec_data['affected_students'] = 1
                     
                     python_recommendations.append(rec_data)
                     

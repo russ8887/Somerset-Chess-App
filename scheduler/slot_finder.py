@@ -854,6 +854,32 @@ class SwapChain:
                 students.append(move.displaced_student)
         return students
     
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert SwapChain to JSON-serializable dictionary"""
+        return {
+            'initial_student_id': self.initial_student.id,
+            'initial_student_name': f"{self.initial_student.first_name} {self.initial_student.last_name}",
+            'moves': [
+                {
+                    'student_id': move.student.id,
+                    'student_name': f"{move.student.first_name} {move.student.last_name}",
+                    'from_group_id': move.from_group.id if move.from_group else None,
+                    'from_group_name': move.from_group.name if move.from_group else None,
+                    'to_group_id': move.to_group.id,
+                    'to_group_name': move.to_group.name,
+                    'benefit_score': move.benefit_score,
+                    'displaced_student_id': move.displaced_student.id if move.displaced_student else None,
+                    'displaced_student_name': f"{move.displaced_student.first_name} {move.displaced_student.last_name}" if move.displaced_student else None
+                }
+                for move in self.moves
+            ],
+            'total_benefit': self.total_benefit,
+            'chain_length': len(self.moves),
+            'affected_students_count': len(self.get_affected_students()),
+            'is_complete': self.is_complete,
+            'validation_errors': self.validation_errors
+        }
+    
     def validate_chain(self) -> Tuple[bool, List[str]]:
         """Comprehensive validation of the swap chain"""
         errors = []
