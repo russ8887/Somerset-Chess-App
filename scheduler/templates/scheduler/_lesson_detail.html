@@ -3,7 +3,17 @@
     <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center">
             <div>
-                <h5 class="mb-0">{{ lesson.scheduled_group.name }}</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <h5 class="mb-0">{{ lesson.scheduled_group.name }}</h5>
+                    {% with current_size=lesson.scheduled_group.get_current_size max_capacity=lesson.scheduled_group.get_type_based_max_capacity %}
+                        {% if current_size < max_capacity %}
+                            <span class="badge bg-warning text-dark" title="This {{ lesson.scheduled_group.get_group_type_display|lower }} lesson has {{ current_size }}/{{ max_capacity }} students">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                {{ current_size }}/{{ max_capacity }} students
+                            </span>
+                        {% endif %}
+                    {% endwith %}
+                </div>
                 <small class="text-muted">{{ lesson.scheduled_group.time_slot }}</small>
             </div>
             <a href="{% url 'manage-lesson' lesson.pk %}" class="btn btn-outline-primary btn-sm">
