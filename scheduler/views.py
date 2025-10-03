@@ -14,7 +14,6 @@ from .models import (
     ScheduledGroup, ScheduledUnavailability, Student, Term, SchoolClass, TimeSlot, OneOffEvent
 )
 from .forms import LessonNoteForm
-from .slot_finder import find_better_slot, EnhancedSlotFinderEngine
 from django.http import JsonResponse
 import json
 
@@ -572,293 +571,84 @@ def create_note_view(request, record_pk):
         return render(request, 'scheduler/_lesson_detail.html', context)
 
 
-# --- Intelligent Slot Finder API Views ---
+# --- New Visual Slot Finder API ---
 
 @login_required
-def find_better_slot_api(request, student_id):
-    """Enhanced API endpoint combining PostgreSQL RPC function with Python swap chain engine"""
-    import logging
-    import time as time_module
-    from django.db import connection
-    
-    logger = logging.getLogger(__name__)
-    
+def get_available_slots_api(request, student_id):
+    """Simple API to get all available slots for a student across all days/coaches"""
     if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'success': False, 'error': 'Invalid request'})
     
-    start_time = time_module.time()
-    
     try:
-        # First check if student exists with detailed logging
-        logger.info(f"🚀 ENHANCED SLOT FINDER: Starting comprehensive analysis for student {student_id}")
+        student = get_object_or_404(Student, pk=student_id)
+        current_term = Term.get_active_term()
         
+        if not current_term:
+            return JsonResponse({'success': False, 'error': 'No active term found'})
+        
+        # Get student's enrollment
         try:
-            student = Student.objects.get(pk=student_id)
-            logger.info(f"✅ Found student {student.id} ({student.first_name} {student.last_name})")
-        except Student.DoesNotExist:
-            logger.error(f"❌ Student with ID {student_id} does not exist")
-            existing_ids = list(Student.objects.values_list('id', flat=True).order_by('id')[:10])
-            logger.info(f"First 10 existing student IDs: {existing_ids}")
-            total_students = Student.objects.count()
-            logger.info(f"Total students in database: {total_students}")
-            return JsonResponse({
-                'success': False, 
-                'error': f'Student ID {student_id} not found. There are {total_students} students in the system.'
-            })
+            enrollment = student.enrollment_set.get(term=current_term)
+            student_enrollment_type = enrollment.enrollment_type
+        except Enrollment.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Student not enrolled in current term'})
         
-        # Get the active term for this student
-        try:
-            # First try to get the student's current enrollment term
-            current_enrollment = student.enrollment_set.select_related('term').filter(
-                term__start_date__lte=date.today(),
-                term__end_date__gte=date.today()
-            ).first()
+        # Get all available slots for this student
+        available_slots = []
+        
+        # Check all days of the week
+        for day in range(5):  # Monday to Friday
+            day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][day]
             
-            if current_enrollment:
-                active_term_id = current_enrollment.term.id
-                active_term = current_enrollment.term
-                logger.info(f"📅 Using student's active enrollment term: {current_enrollment.term.name} (ID: {active_term_id})")
-            else:
-                # Fallback to system active term
-                from .models import Term
-                active_term = Term.get_active_term()
-                if active_term:
-                    active_term_id = active_term.id
-                    logger.info(f"📅 Using system active term: {active_term.name} (ID: {active_term_id})")
-                else:
-                    logger.error("❌ No active term found")
-                    return JsonResponse({
-                        'success': False, 
-                        'error': 'No active term found. Please contact an administrator.'
-                    })
-        except Exception as e:
-            logger.error(f"❌ Error determining active term: {str(e)}")
-            return JsonResponse({
-                'success': False, 
-                'error': f'Could not determine active term: {str(e)}'
-            })
-
-        # PHASE 1: PostgreSQL Direct Placements and Displacements
-        logger.info("🔍 Phase 1: PostgreSQL direct placements and displacements")
-        postgresql_recommendations = []
-        
-        with connection.cursor() as cursor:
-            logger.info(f"🔍 Calling PostgreSQL optimization function with student_id={student_id}, term_id={active_term_id}...")
+            # Check if student is available on this day
+            if not _is_student_available_on_day(student, day):
+                continue
             
-            cursor.execute("""
-                SELECT 
-                    slot_id, group_id, group_name, coach_name, day_name, time_slot,
-                    compatibility_score, placement_type, current_size, max_capacity,
-                    displacement_info, explanation, feasibility_score
-                FROM find_optimal_slots_advanced(%s, %s, %s, %s)
-            """, [student_id, active_term_id, True, 15])  # Increased to 15 results
+            # Get all time slots
+            time_slots = TimeSlot.objects.all().order_by('start_time')
             
-            results = cursor.fetchall()
-            
-        logger.info(f"🎯 PostgreSQL found {len(results)} recommendations")
-        
-        # Convert PostgreSQL results to JSON-serializable format with enhanced details
-        for row in results:
-                    (slot_id, group_id, group_name, coach_name, day_name, time_slot,
-                     compatibility_score, placement_type, current_size, max_capacity,
-                     displacement_info, explanation, feasibility_score) = row
-                    
-                    # Get current students in this group for enhanced display
-                    try:
-                        group = ScheduledGroup.objects.get(id=group_id)
-                        current_students = _get_current_students_info(group, active_term)
-                    except ScheduledGroup.DoesNotExist:
-                        current_students = []
-                    
-                    rec_data = {
-                        'group_name': group_name,
-                        'group_id': group_id,
-                        'score': compatibility_score,
-                        'percentage': int((compatibility_score / 370) * 100),
-                        'placement_type': placement_type,
-                        'day_name': day_name,
-                        'time_slot': time_slot,
-                        'coach_name': coach_name,
-                        'current_size': current_size,
-                        'max_capacity': max_capacity,
-                        'explanation': explanation,
-                        'feasibility_score': feasibility_score,
-                        'displacement_info': displacement_info,
-                        'current_students': current_students,
-                        'current_students_display': _format_students_display(current_students),
-                    }
-                    
-                    # Add placement-specific data from displacement_info
-                    if displacement_info:
-                        if displacement_info.get('type') == 'displacement':
-                            displaced_student = displacement_info.get('displaced_student')
-                            if displaced_student:
-                                rec_data['displaced_student'] = displaced_student
-                                rec_data['complexity'] = displacement_info.get('complexity', 1)
-                                rec_data['displacement_explanation'] = _format_displacement_explanation(
-                                    displaced_student, current_students
-                                )
-                    
-                    postgresql_recommendations.append(rec_data)
-        
-        # PHASE 2: Python Swap Chain Engine (if we have time and want more options)
-        python_recommendations = []
-        remaining_time = 30 - (time_module.time() - start_time)  # Reserve 30 seconds total
-        
-        if remaining_time > 5 and len(postgresql_recommendations) < 10:  # Only if we need more options
-            logger.info("🔍 Phase 2: Python swap chain analysis")
-            try:
-                from .slot_finder import EnhancedSlotFinderEngine
+            for time_slot in time_slots:
+                # Check if student is available at this specific time
+                if not _is_student_available_at_time(student, day, time_slot):
+                    continue
                 
-                # Use the enhanced Python engine for complex swap chains
-                engine = EnhancedSlotFinderEngine()
-                python_results = engine.find_optimal_slots(
-                    student, 
-                    max_results=5,  # Limit to avoid duplication
-                    include_swaps=True,
-                    include_chains=True,
-                    max_time_seconds=int(remaining_time)
-                )
+                # Find all groups at this day/time across all coaches
+                groups_at_time = ScheduledGroup.objects.filter(
+                    term=current_term,
+                    day_of_week=day,
+                    time_slot=time_slot
+                ).select_related('coach').prefetch_related('members')
                 
-                logger.info(f"🎯 Python engine found {len(python_results)} additional recommendations")
-                
-                # Convert Python results to JSON format
-                for rec in python_results:
-                    # Skip if we already have this group from PostgreSQL
-                    if any(pg_rec['group_id'] == rec.group.id for pg_rec in postgresql_recommendations):
-                        continue
-                    
-                    rec_data = {
-                        'group_name': rec.group.name,
-                        'group_id': rec.group.id,
-                        'score': rec.score,
-                        'percentage': int((rec.score / 370) * 100),
-                        'placement_type': rec.placement_type,
-                        'day_name': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][rec.group.day_of_week],
-                        'time_slot': str(rec.group.time_slot),
-                        'coach_name': str(rec.group.coach) if rec.group.coach else 'No Coach',
-                        'current_size': rec.group.get_current_size(),
-                        'max_capacity': rec.group.max_capacity,
-                        'explanation': f"Python engine: {rec.placement_type} placement",
-                        'feasibility_score': rec.score,
-                        'displacement_info': {
-                            'type': rec.placement_type,
-                            'python_engine': True
-                        }
-                    }
-                    
-                    # Add swap/chain specific data with safe attribute access
-                    if rec.placement_type == 'swap' and hasattr(rec, 'swap_chain') and rec.swap_chain:
-                        # Handle both SwapChain objects and list formats
-                        if hasattr(rec.swap_chain, 'to_dict'):
-                            # SwapChain object - convert to dict
-                            rec_data['swap_chain'] = rec.swap_chain.to_dict()
-                            rec_data['chain_length'] = rec.swap_chain.get_chain_length()
-                            rec_data['affected_students'] = len(rec.swap_chain.get_affected_students())
-                        elif isinstance(rec.swap_chain, list):
-                            # List format - use as is
-                            rec_data['swap_chain'] = rec.swap_chain
-                            rec_data['chain_length'] = len(rec.swap_chain)
-                            rec_data['affected_students'] = len(set(move.get('student_id') for move in rec.swap_chain if move.get('student_id')))
-                        else:
-                            # Fallback for unknown format
-                            rec_data['swap_chain'] = rec.swap_chain
-                            rec_data['chain_length'] = 1
-                            rec_data['affected_students'] = 1
-                    elif rec.placement_type == 'chain' and hasattr(rec, 'swap_chain') and rec.swap_chain:
-                        # Handle both SwapChain objects and list formats
-                        if hasattr(rec.swap_chain, 'to_dict'):
-                            # SwapChain object - convert to dict
-                            rec_data['swap_chain'] = rec.swap_chain.to_dict()
-                            rec_data['chain_length'] = rec.swap_chain.get_chain_length()
-                            rec_data['affected_students'] = len(rec.swap_chain.get_affected_students())
-                        elif isinstance(rec.swap_chain, list):
-                            # List format - use as is
-                            rec_data['swap_chain'] = rec.swap_chain
-                            rec_data['chain_length'] = len(rec.swap_chain)
-                            rec_data['affected_students'] = len(set(move.get('student_id') for move in rec.swap_chain if move.get('student_id')))
-                        else:
-                            # Fallback for unknown format
-                            rec_data['swap_chain'] = rec.swap_chain
-                            rec_data['chain_length'] = 1
-                            rec_data['affected_students'] = 1
-                    
-                    python_recommendations.append(rec_data)
-                    
-            except Exception as e:
-                logger.warning(f"⚠️ Python swap chain analysis failed: {str(e)}")
-        
-        # PHASE 3: Combine and rank all recommendations
-        all_recommendations = postgresql_recommendations + python_recommendations
-        
-        # Sort by score (highest first), then by placement type preference
-        placement_priority = {'direct': 3, 'displacement': 2, 'swap': 1, 'chain': 0}
-        all_recommendations.sort(
-            key=lambda x: (x['score'], placement_priority.get(x['placement_type'], 0)), 
-            reverse=True
-        )
-        
-        # Limit to top recommendations
-        final_recommendations = all_recommendations[:10]
-        
-        analysis_time = time_module.time() - start_time
-        logger.info(f"🎯 Complete analysis finished in {analysis_time:.2f} seconds")
-        
-        # Categorize final recommendations
-        direct_placements = [r for r in final_recommendations if r['placement_type'] == 'direct']
-        displacements = [r for r in final_recommendations if r['placement_type'] == 'displacement']
-        swaps = [r for r in final_recommendations if r['placement_type'] == 'swap']
-        chains = [r for r in final_recommendations if r['placement_type'] == 'chain']
-        
-        # Provide comprehensive message
-        if not final_recommendations:
-            message = f"No alternative slots found for {student.first_name}. Current placement appears optimal!"
-        else:
-            message_parts = []
-            if direct_placements:
-                message_parts.append(f"{len(direct_placements)} direct placement(s)")
-            if displacements:
-                message_parts.append(f"{len(displacements)} displacement option(s)")
-            if swaps:
-                message_parts.append(f"{len(swaps)} swap option(s)")
-            if chains:
-                message_parts.append(f"{len(chains)} chain move(s)")
-            
-            message = f"Found {' and '.join(message_parts)} for {student.first_name}"
-        
-        logger.info(f"📊 Final Results: {len(direct_placements)} direct, {len(displacements)} displacement, {len(swaps)} swap, {len(chains)} chain options")
+                for group in groups_at_time:
+                    # Check if student can join this group
+                    if _can_student_join_group(student, group, student_enrollment_type):
+                        available_slots.append({
+                            'group_id': group.id,
+                            'group_name': group.name,
+                            'day': day,
+                            'day_name': day_name,
+                            'time_slot': str(time_slot),
+                            'coach_name': str(group.coach) if group.coach else 'No Coach',
+                            'current_size': group.get_current_size(),
+                            'max_capacity': group.get_type_based_max_capacity(),
+                            'has_space': group.has_space(),
+                            'group_type': group.group_type
+                        })
         
         return JsonResponse({
             'success': True,
-            'recommendations': final_recommendations,
             'student_name': f"{student.first_name} {student.last_name}",
-            'analysis_time': f"{analysis_time:.2f} seconds",
-            'message': message,
-            'summary': {
-                'total': len(final_recommendations),
-                'direct_placements': len(direct_placements),
-                'displacements': len(displacements),
-                'swaps': len(swaps),
-                'chains': len(chains),
-                'postgresql_results': len(postgresql_recommendations),
-                'python_results': len(python_recommendations)
-            }
+            'available_slots': available_slots,
+            'total_slots': len(available_slots)
         })
         
     except Exception as e:
-        logger.error(f"💥 Enhanced slot finder error for student {student_id}: {str(e)}")
-        return JsonResponse({
-            'success': False, 
-            'error': f'Advanced analysis failed: {str(e)}. Please try again or contact support.'
-        })
+        return JsonResponse({'success': False, 'error': str(e)})
 
 
 @login_required
-def execute_slot_move_api(request, student_id):
-    """API endpoint for executing a slot move"""
-    import logging
-    logger = logging.getLogger(__name__)
-    
+def move_student_to_slot_api(request, student_id):
+    """API to move a student to a specific slot"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST request required'})
     
@@ -867,284 +657,95 @@ def execute_slot_move_api(request, student_id):
     
     try:
         data = json.loads(request.body)
-        logger.info(f"🔄 SLOT MOVE: Starting move for student {student_id} with data: {data}")
-        
         student = get_object_or_404(Student, pk=student_id)
         target_group_id = data.get('group_id')
-        placement_type = data.get('placement_type', 'direct')
-        
-        logger.info(f"✅ Found student: {student.first_name} {student.last_name}")
         
         if not target_group_id:
-            logger.error("❌ No group_id provided in request data")
             return JsonResponse({'success': False, 'error': 'Group ID required'})
         
         target_group = get_object_or_404(ScheduledGroup, pk=target_group_id)
-        logger.info(f"✅ Found target group: {target_group.name}")
-        
         current_term = Term.get_active_term()
-        if not current_term:
-            logger.error("❌ No active term found")
-            return JsonResponse({'success': False, 'error': 'No active term found'})
         
-        logger.info(f"✅ Active term: {current_term.name}")
+        if not current_term:
+            return JsonResponse({'success': False, 'error': 'No active term found'})
         
         # Get student's enrollment
         try:
             enrollment = student.enrollment_set.get(term=current_term)
-            logger.info(f"✅ Found enrollment: {enrollment.enrollment_type} type")
         except Enrollment.DoesNotExist:
-            logger.error(f"❌ Student {student.first_name} not enrolled in current term {current_term.name}")
             return JsonResponse({'success': False, 'error': 'Student not enrolled in current term'})
         
-        # Handle different placement types
-        if placement_type == 'direct':
-            logger.info("🎯 Processing DIRECT placement")
+        # Use atomic transaction for safety
+        with transaction.atomic():
+            # Find current groups for this student
+            current_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
             
-            # Check if group has space
-            if not target_group.has_space():
-                logger.error(f"❌ Target group {target_group.name} is full ({target_group.get_current_size()}/{target_group.max_capacity})")
-                return JsonResponse({'success': False, 'error': 'Target group is full'})
+            # Remove from current groups
+            for group in current_groups:
+                group.members.remove(enrollment)
             
-            logger.info(f"✅ Target group has space: {target_group.get_current_size()}/{target_group.max_capacity}")
+            # Add to new group
+            target_group.members.add(enrollment)
             
-            # Use atomic transaction for safety
-            try:
-                with transaction.atomic():
-                    # Find current groups for this student
-                    current_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
-                    logger.info(f"📋 Student currently in {current_groups.count()} groups: {[g.name for g in current_groups]}")
-                    
-                    # Remove from current groups
-                    for group in current_groups:
-                        logger.info(f"➖ Removing from group: {group.name}")
-                        group.members.remove(enrollment)
-                    
-                    # Add to new group
-                    logger.info(f"➕ Adding to new group: {target_group.name}")
-                    target_group.members.add(enrollment)
-                    
-                    # Verify the move worked
-                    new_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
-                    logger.info(f"✅ Move completed. Student now in {new_groups.count()} groups: {[g.name for g in new_groups]}")
-                    
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'Successfully moved {student.first_name} to {target_group.name}',
-                        'new_group': target_group.name,
-                        'previous_groups': [g.name for g in current_groups],
-                        'debug_info': {
-                            'student_id': student_id,
-                            'enrollment_id': enrollment.id,
-                            'target_group_id': target_group_id,
-                            'placement_type': placement_type
-                        }
-                    })
-                    
-            except Exception as e:
-                logger.error(f"💥 Transaction failed during direct move: {str(e)}")
-                return JsonResponse({'success': False, 'error': f'Move failed: {str(e)}'})
-        
-        elif placement_type == 'displacement':
-            logger.info("🎯 Processing DISPLACEMENT placement")
-            
-            # For displacement, we treat it as a direct move since the PostgreSQL function
-            # has already identified this as a valid displacement scenario
-            if not target_group.has_space():
-                logger.info(f"✅ Target group appears full but displacement is valid: {target_group.get_current_size()}/{target_group.max_capacity}")
-            
-            # Use atomic transaction for safety
-            try:
-                with transaction.atomic():
-                    # Find current groups for this student
-                    current_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
-                    logger.info(f"📋 Student currently in {current_groups.count()} groups: {[g.name for g in current_groups]}")
-                    
-                    # Remove from current groups
-                    for group in current_groups:
-                        logger.info(f"➖ Removing from group: {group.name}")
-                        group.members.remove(enrollment)
-                    
-                    # Add to new group (displacement logic handled by PostgreSQL validation)
-                    logger.info(f"➕ Adding to new group via displacement: {target_group.name}")
-                    target_group.members.add(enrollment)
-                    
-                    # Verify the move worked
-                    new_groups = ScheduledGroup.objects.filter(members=enrollment, term=current_term)
-                    logger.info(f"✅ Displacement completed. Student now in {new_groups.count()} groups: {[g.name for g in new_groups]}")
-                    
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'Successfully moved {student.first_name} to {target_group.name} via displacement',
-                        'new_group': target_group.name,
-                        'previous_groups': [g.name for g in current_groups],
-                        'placement_type': 'displacement',
-                        'debug_info': {
-                            'student_id': student_id,
-                            'enrollment_id': enrollment.id,
-                            'target_group_id': target_group_id,
-                            'placement_type': placement_type
-                        }
-                    })
-                    
-            except Exception as e:
-                logger.error(f"💥 Transaction failed during displacement move: {str(e)}")
-                return JsonResponse({'success': False, 'error': f'Displacement failed: {str(e)}'})
-            
-        elif placement_type == 'swap':
-            # Handle swap operations
-            displaced_student_id = data.get('displaced_student_id')
-            if not displaced_student_id:
-                return JsonResponse({'success': False, 'error': 'Displaced student ID required for swap'})
-            
-            try:
-                displaced_student = Student.objects.get(pk=displaced_student_id)
-                displaced_enrollment = displaced_student.enrollment_set.get(term=current_term)
-            except (Student.DoesNotExist, Enrollment.DoesNotExist):
-                return JsonResponse({'success': False, 'error': 'Displaced student or enrollment not found'})
-            
-            # Find current groups for both students
-            student_current_groups = list(ScheduledGroup.objects.filter(members=enrollment, term=current_term))
-            displaced_current_groups = list(ScheduledGroup.objects.filter(members=displaced_enrollment, term=current_term))
-            
-            # Validate the swap is possible
-            if target_group not in displaced_current_groups:
-                return JsonResponse({'success': False, 'error': 'Displaced student is not in the target group'})
-            
-            # Check if displaced student can fit in original student's groups
-            for group in student_current_groups:
-                # Get displaced student's enrollment type
-                try:
-                    displaced_enrollment = displaced_student.enrollment_set.get(term=current_term)
-                    displaced_enrollment_type = displaced_enrollment.enrollment_type
-                except Enrollment.DoesNotExist:
-                    return JsonResponse({
-                        'success': False,
-                        'error': f'Displaced student {displaced_student.first_name} {displaced_student.last_name} not enrolled in current term'
-                    })
-                
-                if not group.is_compatible_with_student(displaced_student, displaced_enrollment_type):
-                    return JsonResponse({
-                        'success': False, 
-                        'error': f'Displaced student is not compatible with group {group.name}'
-                    })
-            
-            # Execute the swap using atomic transaction
-            try:
-                with transaction.atomic():
-                    # Remove both students from their current groups
-                    for group in student_current_groups:
-                        group.members.remove(enrollment)
-                    
-                    for group in displaced_current_groups:
-                        group.members.remove(displaced_enrollment)
-                    
-                    # Add students to their new groups
-                    target_group.members.add(enrollment)
-                    for group in student_current_groups:
-                        group.members.add(displaced_enrollment)
-                    
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'Successfully swapped {student.first_name} with {displaced_student.first_name}',
-                        'new_group': target_group.name,
-                        'displaced_student': f'{displaced_student.first_name} {displaced_student.last_name}'
-                    })
-                    
-            except Exception as e:
-                return JsonResponse({'success': False, 'error': f'Swap failed: {str(e)}'})
-                
-        elif placement_type == 'chain':
-            # Handle complex chain moves by re-running the slot finder to get the chain
-            try:
-                # Import the enhanced slot finder engine
-                from .slot_finder import EnhancedSlotFinderEngine
-                
-                # Re-run the slot finder to get fresh chain recommendations
-                engine = EnhancedSlotFinderEngine()
-                recommendations = engine.find_optimal_slots(
-                    student, 
-                    max_results=10,
-                    include_chains=True,
-                    max_time_seconds=120  # 2 minutes for chain execution
-                )
-                
-                # Find the chain recommendation for the target group
-                target_chain = None
-                for rec in recommendations:
-                    if (rec.placement_type == 'chain' and 
-                        rec.group.id == target_group.id and 
-                        hasattr(rec, 'swap_chain') and 
-                        rec.swap_chain):
-                        target_chain = rec.swap_chain
-                        break
-                
-                if not target_chain:
-                    return JsonResponse({
-                        'success': False, 
-                        'error': 'Chain recommendation not found. The optimal chain may have changed. Please try finding better slots again.'
-                    })
-                
-                # Execute the chain using the existing infrastructure
-                success, message = target_chain.execute_chain()
-                
-                if success:
-                    return JsonResponse({
-                        'success': True,
-                        'message': f'Successfully executed {target_chain.get_chain_length()}-move chain for {student.first_name}',
-                        'chain_length': target_chain.get_chain_length(),
-                        'affected_students': len(target_chain.get_affected_students()),
-                        'details': message
-                    })
-                else:
-                    return JsonResponse({'success': False, 'error': f'Chain execution failed: {message}'})
-                    
-            except Exception as e:
-                return JsonResponse({'success': False, 'error': f'Chain move failed: {str(e)}'})
-        else:
-            return JsonResponse({'success': False, 'error': f'Unknown placement type: {placement_type}'})
+            return JsonResponse({
+                'success': True,
+                'message': f'Successfully moved {student.first_name} to {target_group.name}',
+                'new_group': target_group.name,
+                'previous_groups': [g.name for g in current_groups]
+            })
             
     except Exception as e:
-        return JsonResponse({'success': False, 'error': f'Move failed: {str(e)}'})
+        return JsonResponse({'success': False, 'error': str(e)})
 
 
-def _get_current_students_info(group, term):
-    """Get current students in a group with their details"""
-    current_students = []
-    for member in group.members.filter(term=term):
-        student = member.student
-        current_students.append({
-            'id': student.id,
-            'name': f"{student.first_name} {student.last_name}",
-            'skill_level': student.skill_level,
-            'year_level': student.year_level,
-            'enrollment_type': member.enrollment_type
-        })
-    return current_students
-
-
-def _format_students_display(current_students):
-    """Format current students for display"""
-    if not current_students:
-        return "Empty group"
+# Helper functions for availability checking
+def _is_student_available_on_day(student, day):
+    """Check if student is available on a specific day"""
+    # Check for individual unavailabilities
+    individual_conflicts = ScheduledUnavailability.objects.filter(
+        students=student,
+        day_of_week=day
+    ).exists()
     
-    student_names = []
-    for student in current_students:
-        name_with_skill = f"{student['name']} (Skill {student['skill_level']})"
-        student_names.append(name_with_skill)
+    # Check for class-based unavailabilities
+    class_conflicts = False
+    if student.school_class:
+        class_conflicts = ScheduledUnavailability.objects.filter(
+            school_classes=student.school_class,
+            day_of_week=day
+        ).exists()
     
-    return ", ".join(student_names)
+    return not (individual_conflicts or class_conflicts)
 
 
-def _format_displacement_explanation(displaced_student, current_students):
-    """Format displacement explanation"""
-    if not displaced_student:
-        return ""
+def _is_student_available_at_time(student, day, time_slot):
+    """Check if student is available at a specific day/time"""
+    conflict_info = student.has_scheduling_conflict(day, time_slot)
+    return not conflict_info['has_conflict']
+
+
+def _can_student_join_group(student, group, student_enrollment_type):
+    """Check if student can join a specific group"""
+    # Check if group has space or if we allow overfilling
+    if not group.has_space():
+        # For now, allow overfilling - we'll show visual indicators
+        pass
     
-    displaced_name = displaced_student.get('name', 'Unknown Student')
-    alternative = displaced_student.get('alternative_placement', 'another group')
+    # Check basic compatibility
+    if not group.is_compatible_with_student(student, student_enrollment_type):
+        return False
     
-    return f"Would displace {displaced_name} to {alternative}"
+    # Check if student is already in this group
+    current_term = Term.get_active_term()
+    if current_term:
+        try:
+            enrollment = student.enrollment_set.get(term=current_term)
+            if enrollment in group.members.all():
+                return False
+        except Enrollment.DoesNotExist:
+            return False
+    
+    return True
 
 
 @login_required

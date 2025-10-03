@@ -38,7 +38,7 @@ urlpatterns = [
     path('events/quick-actions/', event_views.quick_event_actions, name='quick-event-actions'),
     path('api/search-students/', event_views.search_students, name='search-students'),
     
-    # Intelligent Slot Finder API endpoints
-    path('api/find-better-slot/<int:student_id>/', views.find_better_slot_api, name='find-better-slot-api'),
-    path('api/execute-slot-move/<int:student_id>/', views.execute_slot_move_api, name='execute-slot-move-api'),
+    # Visual Slot Finder API endpoints
+    path('api/available-slots/<int:student_id>/', views.get_available_slots_api, name='get-available-slots-api'),
+    path('api/move-student/<int:student_id>/', views.move_student_to_slot_api, name='move-student-to-slot-api'),
 ]
