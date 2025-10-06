@@ -27,7 +27,11 @@ def _prepare_lesson_context(lesson, editing_note_id=None, request=None):
         if not hasattr(record, '_conflict_info'):
             record._conflict_info = record.get_scheduling_conflict()
     
-    context = {'lesson': lesson, 'editing_note_id': editing_note_id}
+    # Always provide editing_note_id (even if None) to prevent template errors
+    context = {
+        'lesson': lesson, 
+        'editing_note_id': editing_note_id
+    }
     
     # Add request context if available (needed for template variables)
     if request:
@@ -586,31 +590,22 @@ def get_available_slots_api(request, student_id):
         if not current_term:
             return JsonResponse({'success': False, 'error': 'No active term found'})
         
-        # Get student's enrollment
-        try:
-            enrollment = student.enrollment_set.get(term=current_term)
-            student_enrollment_type = enrollment.enrollment_type
-        except Enrollment.DoesNotExist:
-            return JsonResponse({'success': False, 'error': 'Student not enrolled in current term'})
-        
-        # Get all available slots for this student
+        # Get all available slots for this student - SIMPLIFIED APPROACH
         available_slots = []
         
         # Check all days of the week
         for day in range(5):  # Monday to Friday
             day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][day]
             
-            # Check if student is available on this day
-            if not _is_student_available_on_day(student, day):
-                continue
-            
             # Get all time slots
             time_slots = TimeSlot.objects.all().order_by('start_time')
             
             for time_slot in time_slots:
-                # Check if student is available at this specific time
-                if not _is_student_available_at_time(student, day, time_slot):
-                    continue
+                # SIMPLIFIED: Only check if student is available at this specific day/time
+                # No complex compatibility checking - just show where they're free
+                conflict_info = student.has_scheduling_conflict(day, time_slot)
+                if conflict_info['has_conflict']:
+                    continue  # Skip if student has a conflict
                 
                 # Find all groups at this day/time across all coaches
                 groups_at_time = ScheduledGroup.objects.filter(
@@ -619,21 +614,20 @@ def get_available_slots_api(request, student_id):
                     time_slot=time_slot
                 ).select_related('coach').prefetch_related('members')
                 
+                # Add ALL groups at this time - let user decide what makes sense
                 for group in groups_at_time:
-                    # Check if student can join this group (include current group for visual slot finder)
-                    if _can_student_join_group(student, group, student_enrollment_type, exclude_current_group=False):
-                        available_slots.append({
-                            'group_id': group.id,
-                            'group_name': group.name,
-                            'day': day,
-                            'day_name': day_name,
-                            'time_slot': str(time_slot),
-                            'coach_name': str(group.coach) if group.coach else 'No Coach',
-                            'current_size': group.get_current_size(),
-                            'max_capacity': group.get_type_based_max_capacity(),
-                            'has_space': group.has_space(),
-                            'group_type': group.group_type
-                        })
+                    available_slots.append({
+                        'group_id': group.id,
+                        'group_name': group.name,
+                        'day': day,
+                        'day_name': day_name,
+                        'time_slot': str(time_slot),
+                        'coach_name': str(group.coach) if group.coach else 'No Coach',
+                        'current_size': group.get_current_size(),
+                        'max_capacity': group.get_type_based_max_capacity(),
+                        'has_space': group.has_space(),
+                        'group_type': group.group_type
+                    })
         
         return JsonResponse({
             'success': True,
