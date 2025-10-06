@@ -620,8 +620,8 @@ def get_available_slots_api(request, student_id):
                 ).select_related('coach').prefetch_related('members')
                 
                 for group in groups_at_time:
-                    # Check if student can join this group
-                    if _can_student_join_group(student, group, student_enrollment_type):
+                    # Check if student can join this group (include current group for visual slot finder)
+                    if _can_student_join_group(student, group, student_enrollment_type, exclude_current_group=False):
                         available_slots.append({
                             'group_id': group.id,
                             'group_name': group.name,
@@ -724,7 +724,7 @@ def _is_student_available_at_time(student, day, time_slot):
     return not conflict_info['has_conflict']
 
 
-def _can_student_join_group(student, group, student_enrollment_type):
+def _can_student_join_group(student, group, student_enrollment_type, exclude_current_group=True):
     """Check if student can join a specific group"""
     # Check if group has space or if we allow overfilling
     if not group.has_space():
@@ -735,15 +735,16 @@ def _can_student_join_group(student, group, student_enrollment_type):
     if not group.is_compatible_with_student(student, student_enrollment_type):
         return False
     
-    # Check if student is already in this group
-    current_term = Term.get_active_term()
-    if current_term:
-        try:
-            enrollment = student.enrollment_set.get(term=current_term)
-            if enrollment in group.members.all():
+    # Check if student is already in this group (only exclude if requested)
+    if exclude_current_group:
+        current_term = Term.get_active_term()
+        if current_term:
+            try:
+                enrollment = student.enrollment_set.get(term=current_term)
+                if enrollment in group.members.all():
+                    return False
+            except Enrollment.DoesNotExist:
                 return False
-        except Enrollment.DoesNotExist:
-            return False
     
     return True
 
