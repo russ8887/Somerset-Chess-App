@@ -524,16 +524,16 @@ class LessonSession(models.Model):
 
     def get_attendance_records(self):
         """
-        DYNAMIC ROSTER GENERATION: Always returns attendance records based on 
-        CURRENT group membership, creating records on-demand if needed.
-        This ensures rosters always match current ScheduledGroup.members.
+        DYNAMIC ROSTER GENERATION: Returns attendance records for both:
+        1. Current group members (regular students)
+        2. Fill-in students (those with FILL_IN attendance records)
+        This ensures both regular and fill-in students appear in the main roster.
         """
         current_members = self.scheduled_group.members.all()
         records = []
         
+        # 1. Create/get records for current group members
         for enrollment in current_members:
-            # Get or create attendance record for this student on this lesson date
-            # This preserves existing attendance data while ensuring current members appear
             record, created = AttendanceRecord.objects.get_or_create(
                 lesson_session=self,
                 enrollment=enrollment,
@@ -541,10 +541,21 @@ class LessonSession(models.Model):
             )
             records.append(record)
         
+        # 2. Get any existing fill-in records that aren't already included
+        existing_enrollment_ids = [enrollment.id for enrollment in current_members]
+        fill_in_records = AttendanceRecord.objects.filter(
+            lesson_session=self,
+            status='FILL_IN'
+        ).exclude(enrollment_id__in=existing_enrollment_ids)
+        
+        # Add fill-in records to the list
+        records.extend(fill_in_records)
+        
         # Prefetch related data for performance
+        all_record_ids = [r.id for r in records]
         return AttendanceRecord.objects.filter(
-            id__in=[r.id for r in records]
-        ).select_related('enrollment__student__school_class').prefetch_related('lessonnote')
+            id__in=all_record_ids
+        ).select_related('enrollment__student__school_class').prefetch_related('lessonnote').order_by('enrollment__student__last_name')
 
     def __str__(self):
         return f"{self.scheduled_group.name} on {self.lesson_date}"
