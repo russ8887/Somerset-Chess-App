@@ -691,15 +691,34 @@ def get_available_slots_api(request, student_id):
 @login_required
 def move_student_to_slot_api(request, student_id):
     """API to move a student to a specific slot"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Debug logging
+    logger.info(f"🔍 move_student_to_slot_api called for student {student_id}")
+    logger.info(f"🔍 Request method: {request.method}")
+    logger.info(f"🔍 User: {request.user}")
+    logger.info(f"🔍 User authenticated: {request.user.is_authenticated}")
+    logger.info(f"🔍 Has coach attr: {hasattr(request.user, 'coach')}")
+    
+    if hasattr(request.user, 'coach'):
+        logger.info(f"🔍 Coach: {request.user.coach}")
+        logger.info(f"🔍 Is head coach: {request.user.coach.is_head_coach}")
+    
     if request.method != 'POST':
+        logger.warning(f"❌ Wrong method: {request.method}")
         return JsonResponse({'success': False, 'error': 'POST request required'})
     
     if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        logger.warning(f"❌ Not AJAX request")
         return JsonResponse({'success': False, 'error': 'Invalid request'})
     
     # HEAD COACH ONLY - Regular coaches don't have access to this feature
     if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach):
+        logger.warning(f"❌ Permission denied for user {request.user}")
         return JsonResponse({'success': False, 'error': 'Access denied. Head coach privileges required.'})
+    
+    logger.info(f"✅ Permission checks passed")
     
     try:
         data = json.loads(request.body)
