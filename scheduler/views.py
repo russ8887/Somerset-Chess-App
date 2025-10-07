@@ -579,9 +579,13 @@ def create_note_view(request, record_pk):
 
 @login_required
 def get_available_slots_api(request, student_id):
-    """Simple API to get all available slots for a student across all days/coaches"""
+    """Enhanced API for head coaches to get all available slots across all days/coaches"""
     if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'success': False, 'error': 'Invalid request'})
+    
+    # HEAD COACH ONLY - Regular coaches don't have access to this feature
+    if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach):
+        return JsonResponse({'success': False, 'error': 'Access denied. Head coach privileges required.'})
     
     try:
         student = get_object_or_404(Student, pk=student_id)
@@ -590,7 +594,7 @@ def get_available_slots_api(request, student_id):
         if not current_term:
             return JsonResponse({'success': False, 'error': 'No active term found'})
         
-        # Get all available slots for this student - SIMPLIFIED APPROACH
+        # ENHANCED FOR HEAD COACHES: Get all available slots across ALL coaches and days
         available_slots = []
         
         # Check all days of the week
@@ -601,20 +605,19 @@ def get_available_slots_api(request, student_id):
             time_slots = TimeSlot.objects.all().order_by('start_time')
             
             for time_slot in time_slots:
-                # SIMPLIFIED: Only check if student is available at this specific day/time
-                # No complex compatibility checking - just show where they're free
+                # Check if student is available at this specific day/time
                 conflict_info = student.has_scheduling_conflict(day, time_slot)
                 if conflict_info['has_conflict']:
                     continue  # Skip if student has a conflict
                 
-                # Find all groups at this day/time across all coaches
+                # HEAD COACH ENHANCEMENT: Find ALL groups across ALL coaches at this day/time
                 groups_at_time = ScheduledGroup.objects.filter(
                     term=current_term,
                     day_of_week=day,
                     time_slot=time_slot
-                ).select_related('coach').prefetch_related('members')
+                ).select_related('coach').prefetch_related('members').order_by('coach__user__first_name', 'name')
                 
-                # Add ALL groups at this time - let user decide what makes sense
+                # Add ALL groups at this time - head coach can move students anywhere
                 for group in groups_at_time:
                     available_slots.append({
                         'group_id': group.id,
@@ -623,17 +626,21 @@ def get_available_slots_api(request, student_id):
                         'day_name': day_name,
                         'time_slot': str(time_slot),
                         'coach_name': str(group.coach) if group.coach else 'No Coach',
+                        'coach_id': group.coach.id if group.coach else None,
                         'current_size': group.get_current_size(),
                         'max_capacity': group.get_type_based_max_capacity(),
                         'has_space': group.has_space(),
-                        'group_type': group.group_type
+                        'group_type': group.group_type,
+                        'is_current_coach': group.coach == request.user.coach if group.coach else False
                     })
         
         return JsonResponse({
             'success': True,
             'student_name': f"{student.first_name} {student.last_name}",
             'available_slots': available_slots,
-            'total_slots': len(available_slots)
+            'total_slots': len(available_slots),
+            'is_head_coach': True,
+            'current_coach_id': request.user.coach.id
         })
         
     except Exception as e:

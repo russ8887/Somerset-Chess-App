@@ -31,12 +31,14 @@
                                 {{ record.enrollment.student }}
                                 <small class="text-muted">({{ record.enrollment.get_enrollment_type_display }})</small>
                             </a>
+                            {% if user.coach.is_head_coach %}
                             <button class="btn btn-sm btn-outline-info find-slots-btn" 
                                     data-student-id="{{ record.enrollment.student.pk }}"
                                     data-student-name="{{ record.enrollment.student.first_name }} {{ record.enrollment.student.last_name }}"
                                     title="Find available slots for {{ record.enrollment.student.first_name }}">
                                 <i class="bi bi-search me-1"></i>Find Slots
                             </button>
+                            {% endif %}
                         </div>
                         
                         {% if record.status == 'FILL_IN' %}

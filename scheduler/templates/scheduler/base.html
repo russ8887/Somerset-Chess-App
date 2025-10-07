@@ -694,15 +694,17 @@
             });
         });
 
-        // 🎯 VISUAL SLOT FINDER SYSTEM
+        // 🎯 ENHANCED HEAD COACH SLOT FINDER SYSTEM
         let slotFinderMode = {
             active: false,
             studentId: null,
             studentName: null,
-            availableSlots: []
+            availableSlots: [],
+            isHeadCoach: false,
+            currentCoachId: null
         };
 
-        // Handle Find Slots button clicks
+        // Handle Find Slots button clicks (HEAD COACH ONLY)
         document.addEventListener('click', function(event) {
             if (event.target.closest('.find-slots-btn')) {
                 event.preventDefault();
@@ -710,25 +712,37 @@
                 const studentId = btn.dataset.studentId;
                 const studentName = btn.dataset.studentName;
                 
-                console.log('🔍 Find Slots clicked for:', studentName, 'ID:', studentId);
+                console.log('🔍 Head Coach Find Slots clicked for:', studentName, 'ID:', studentId);
                 
                 if (slotFinderMode.active && slotFinderMode.studentId === studentId) {
                     // Exit slot finder mode
                     exitSlotFinderMode();
                 } else {
-                    // Enter slot finder mode for this student
-                    enterSlotFinderMode(studentId, studentName);
+                    // Enter enhanced slot finder mode for this student
+                    enterHeadCoachSlotFinderMode(studentId, studentName);
                 }
             }
         });
 
-        function enterSlotFinderMode(studentId, studentName) {
-            console.log('🎯 Entering slot finder mode for:', studentName);
+        // Check URL parameters on page load to restore slot finder mode
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const slotFinderStudent = urlParams.get('slot_finder_student');
+            const slotFinderName = urlParams.get('slot_finder_name');
+            
+            if (slotFinderStudent && slotFinderName) {
+                console.log('🔄 Restoring slot finder mode for:', slotFinderName);
+                enterHeadCoachSlotFinderMode(slotFinderStudent, slotFinderName, true);
+            }
+        });
+
+        function enterHeadCoachSlotFinderMode(studentId, studentName, isRestore = false) {
+            console.log('🎯 Entering HEAD COACH slot finder mode for:', studentName);
             
             // Show loading state
-            showSlotFinderBanner(`Finding available slots for ${studentName}...`, true);
+            showHeadCoachSlotFinderBanner(`Finding available slots across all coaches for ${studentName}...`, true);
             
-            // Fetch available slots
+            // Fetch available slots (HEAD COACH API)
             fetch(`/api/available-slots/${studentId}/`, {
                 method: 'GET',
                 headers: {
@@ -743,24 +757,36 @@
                         active: true,
                         studentId: studentId,
                         studentName: studentName,
-                        availableSlots: data.available_slots
+                        availableSlots: data.available_slots,
+                        isHeadCoach: data.is_head_coach || false,
+                        currentCoachId: data.current_coach_id || null
                     };
                     
-                    console.log('✅ Found', data.available_slots.length, 'available slots');
-                    showSlotFinderBanner(`Found ${data.available_slots.length} available slots for ${studentName}`, false);
+                    console.log('✅ Found', data.available_slots.length, 'available slots across all coaches');
+                    showHeadCoachSlotFinderBanner(`Found ${data.available_slots.length} available slots for ${studentName}`, false);
                     highlightAvailableSlots(data.available_slots);
                     updateFindSlotsButtons();
+                    
+                    // Add URL parameters for persistence (only if not restoring)
+                    if (!isRestore) {
+                        addSlotFinderToURL(studentId, studentName);
+                    }
                 } else {
                     console.error('❌ Error finding slots:', data.error);
-                    showSlotFinderBanner(`Error: ${data.error}`, false, true);
+                    showHeadCoachSlotFinderBanner(`Error: ${data.error}`, false, true);
                     setTimeout(exitSlotFinderMode, 3000);
                 }
             })
             .catch(error => {
                 console.error('💥 Network error:', error);
-                showSlotFinderBanner('Network error - please try again', false, true);
+                showHeadCoachSlotFinderBanner('Network error - please try again', false, true);
                 setTimeout(exitSlotFinderMode, 3000);
             });
+        }
+
+        function enterSlotFinderMode(studentId, studentName) {
+            // Redirect to head coach version
+            enterHeadCoachSlotFinderMode(studentId, studentName);
         }
 
         function exitSlotFinderMode() {
@@ -898,7 +924,7 @@
             console.log('🚀 Moving student to slot:', groupId, groupName);
             
             // Show loading state
-            showSlotFinderBanner(`Moving ${slotFinderMode.studentName} to ${groupName}...`, true);
+            showHeadCoachSlotFinderBanner(`Moving ${slotFinderMode.studentName} to ${groupName}...`, true);
             
             // Make the move request
             fetch(`/api/move-student/${slotFinderMode.studentId}/`, {
@@ -916,24 +942,139 @@
             .then(data => {
                 if (data.success) {
                     console.log('✅ Student moved successfully');
-                    showSlotFinderBanner(`✅ Successfully moved ${slotFinderMode.studentName} to ${groupName}!`, false);
+                    showHeadCoachSlotFinderBanner(`✅ Successfully moved ${slotFinderMode.studentName} to ${groupName}!`, false);
                     
-                    // Exit slot finder mode after 2 seconds and refresh page
+                    // Clear URL parameters and refresh page after 2 seconds
                     setTimeout(() => {
+                        removeSlotFinderFromURL();
                         exitSlotFinderMode();
                         window.location.reload();
                     }, 2000);
                 } else {
                     console.error('❌ Error moving student:', data.error);
-                    showSlotFinderBanner(`Error: ${data.error}`, false, true);
+                    showHeadCoachSlotFinderBanner(`Error: ${data.error}`, false, true);
                     setTimeout(exitSlotFinderMode, 3000);
                 }
             })
             .catch(error => {
                 console.error('💥 Network error:', error);
-                showSlotFinderBanner('Network error - please try again', false, true);
+                showHeadCoachSlotFinderBanner('Network error - please try again', false, true);
                 setTimeout(exitSlotFinderMode, 3000);
             });
+        }
+
+        // HEAD COACH ENHANCED BANNER WITH NAVIGATION
+        function showHeadCoachSlotFinderBanner(message, loading = false, error = false) {
+            // Remove existing banner
+            const existingBanner = document.querySelector('.slot-finder-banner');
+            if (existingBanner) {
+                existingBanner.remove();
+            }
+            
+            // Create enhanced banner for head coaches
+            const banner = document.createElement('div');
+            banner.className = `alert slot-finder-banner ${error ? 'alert-danger' : 'alert-primary'}`;
+            banner.style.cssText = 'position: sticky; top: 0; z-index: 1000; margin-bottom: 1rem; border: 2px solid #0d6efd;';
+            
+            // Create banner content
+            const bannerContent = document.createElement('div');
+            bannerContent.className = 'd-flex justify-content-between align-items-center w-100';
+            
+            // Message section
+            const messageSection = document.createElement('div');
+            messageSection.className = 'd-flex align-items-center';
+            
+            const messageSpan = document.createElement('span');
+            messageSpan.innerHTML = loading ? 
+                `<i class="bi bi-hourglass-split me-2"></i>${message}` : 
+                `<i class="bi bi-crown me-2"></i><strong>HEAD COACH MODE:</strong> ${message}`;
+            messageSection.appendChild(messageSpan);
+            
+            // Controls section (only if not loading)
+            const controlsSection = document.createElement('div');
+            controlsSection.className = 'd-flex align-items-center gap-2';
+            
+            if (!loading && !error) {
+                // Day navigation buttons
+                const prevDayBtn = document.createElement('button');
+                prevDayBtn.className = 'btn btn-sm btn-outline-primary';
+                prevDayBtn.innerHTML = '<i class="bi bi-chevron-left"></i> Prev Day';
+                prevDayBtn.onclick = () => navigateDay(-1);
+                
+                const nextDayBtn = document.createElement('button');
+                nextDayBtn.className = 'btn btn-sm btn-outline-primary';
+                nextDayBtn.innerHTML = 'Next Day <i class="bi bi-chevron-right"></i>';
+                nextDayBtn.onclick = () => navigateDay(1);
+                
+                // Coach selector (if multiple coaches available)
+                const coachSelect = document.createElement('select');
+                coachSelect.className = 'form-select form-select-sm';
+                coachSelect.style.width = 'auto';
+                coachSelect.innerHTML = '<option>All Coaches</option>'; // Placeholder
+                
+                controlsSection.appendChild(prevDayBtn);
+                controlsSection.appendChild(nextDayBtn);
+                controlsSection.appendChild(coachSelect);
+            }
+            
+            // Cancel button
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn btn-sm btn-outline-secondary';
+            cancelBtn.innerHTML = '<i class="bi bi-x"></i> Exit Mode';
+            cancelBtn.onclick = () => {
+                removeSlotFinderFromURL();
+                exitSlotFinderMode();
+            };
+            controlsSection.appendChild(cancelBtn);
+            
+            bannerContent.appendChild(messageSection);
+            bannerContent.appendChild(controlsSection);
+            banner.appendChild(bannerContent);
+            
+            // Insert at top of main content
+            const main = document.querySelector('main');
+            main.insertBefore(banner, main.firstChild);
+        }
+
+        // URL PERSISTENCE FUNCTIONS
+        function addSlotFinderToURL(studentId, studentName) {
+            const url = new URL(window.location);
+            url.searchParams.set('slot_finder_student', studentId);
+            url.searchParams.set('slot_finder_name', studentName);
+            window.history.replaceState({}, '', url);
+        }
+
+        function removeSlotFinderFromURL() {
+            const url = new URL(window.location);
+            url.searchParams.delete('slot_finder_student');
+            url.searchParams.delete('slot_finder_name');
+            window.history.replaceState({}, '', url);
+        }
+
+        // DAY NAVIGATION FUNCTION
+        function navigateDay(direction) {
+            const currentUrl = new URL(window.location);
+            const currentDate = currentUrl.searchParams.get('date') || new Date().toISOString().split('T')[0];
+            
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() + direction);
+            
+            const newDate = date.toISOString().split('T')[0];
+            currentUrl.searchParams.set('date', newDate);
+            
+            // Maintain slot finder parameters
+            if (slotFinderMode.active) {
+                currentUrl.searchParams.set('slot_finder_student', slotFinderMode.studentId);
+                currentUrl.searchParams.set('slot_finder_name', slotFinderMode.studentName);
+            }
+            
+            console.log('🗓️ Navigating to:', newDate, 'with slot finder active');
+            window.location.href = currentUrl.toString();
+        }
+
+        // Override the regular banner function to use head coach version
+        function showSlotFinderBanner(message, loading = false, error = false) {
+            showHeadCoachSlotFinderBanner(message, loading, error);
         }
     </script>
     
