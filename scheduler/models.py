@@ -524,11 +524,25 @@ class LessonSession(models.Model):
 
     def get_attendance_records(self):
         """
-        DYNAMIC ROSTER GENERATION: Returns attendance records for both:
-        1. Current group members (regular students)
-        2. Fill-in students (those with FILL_IN attendance records)
-        This ensures both regular and fill-in students appear in the main roster.
+        HISTORICAL-AWARE ROSTER GENERATION: 
+        - For PAST lessons: Show students based on existing attendance records (preserves history)
+        - For FUTURE lessons: Show current group members + create records as needed
+        - For TODAY: Show current group members + create records as needed
+        This ensures historical accuracy while allowing future planning.
         """
+        from datetime import date
+        today = date.today()
+        
+        # For past lessons, use historical attendance records only
+        if self.lesson_date < today:
+            # Return existing attendance records - don't create new ones
+            existing_records = AttendanceRecord.objects.filter(
+                lesson_session=self
+            ).select_related('enrollment__student__school_class').prefetch_related('lessonnote').order_by('enrollment__student__last_name')
+            
+            return existing_records
+        
+        # For today and future lessons, use current group members + fill-ins
         current_members = self.scheduled_group.members.all()
         records = []
         
