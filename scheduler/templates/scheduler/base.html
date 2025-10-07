@@ -1020,14 +1020,24 @@
                     allOption.textContent = 'All Coaches';
                     coachSelect.appendChild(allOption);
                     
+                    // Determine which coach should be pre-selected
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const viewingCoachId = urlParams.get('coach'); // Coach we're currently viewing
+                    
                     // Add individual coach options
                     slotFinderMode.availableCoaches.forEach(coach => {
                         const option = document.createElement('option');
                         option.value = coach.id;
                         option.textContent = coach.name;
-                        if (coach.is_current) {
+                        
+                        // Pre-select the coach we're currently viewing, not the current user's coach
+                        if (viewingCoachId && coach.id == viewingCoachId) {
+                            option.selected = true;
+                        } else if (!viewingCoachId && coach.is_current) {
+                            // Fallback to current user's coach if no specific coach is being viewed
                             option.selected = true;
                         }
+                        
                         coachSelect.appendChild(option);
                     });
                     

@@ -697,6 +697,10 @@ def move_student_to_slot_api(request, student_id):
     if not request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'success': False, 'error': 'Invalid request'})
     
+    # HEAD COACH ONLY - Regular coaches don't have access to this feature
+    if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach):
+        return JsonResponse({'success': False, 'error': 'Access denied. Head coach privileges required.'})
+    
     try:
         data = json.loads(request.body)
         student = get_object_or_404(Student, pk=student_id)
