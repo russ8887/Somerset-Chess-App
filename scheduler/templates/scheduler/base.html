@@ -759,7 +759,8 @@
                         studentName: studentName,
                         availableSlots: data.available_slots,
                         isHeadCoach: data.is_head_coach || false,
-                        currentCoachId: data.current_coach_id || null
+                        currentCoachId: data.current_coach_id || null,
+                        availableCoaches: data.available_coaches || []
                     };
                     
                     console.log('✅ Found', data.available_slots.length, 'available slots across all coaches');
@@ -1006,11 +1007,38 @@
                 nextDayBtn.innerHTML = 'Next Day <i class="bi bi-chevron-right"></i>';
                 nextDayBtn.onclick = () => navigateDay(1);
                 
-                // Coach selector (if multiple coaches available)
+                // Coach selector with actual coach data
                 const coachSelect = document.createElement('select');
                 coachSelect.className = 'form-select form-select-sm';
                 coachSelect.style.width = 'auto';
-                coachSelect.innerHTML = '<option>All Coaches</option>'; // Placeholder
+                
+                // Populate with available coaches
+                if (slotFinderMode.availableCoaches && slotFinderMode.availableCoaches.length > 0) {
+                    // Add "All Coaches" option
+                    const allOption = document.createElement('option');
+                    allOption.value = '';
+                    allOption.textContent = 'All Coaches';
+                    coachSelect.appendChild(allOption);
+                    
+                    // Add individual coach options
+                    slotFinderMode.availableCoaches.forEach(coach => {
+                        const option = document.createElement('option');
+                        option.value = coach.id;
+                        option.textContent = coach.name;
+                        if (coach.is_current) {
+                            option.selected = true;
+                        }
+                        coachSelect.appendChild(option);
+                    });
+                    
+                    // Add change event handler for coach switching
+                    coachSelect.addEventListener('change', function() {
+                        navigateToCoach(this.value);
+                    });
+                } else {
+                    // Fallback if no coaches data
+                    coachSelect.innerHTML = '<option>All Coaches</option>';
+                }
                 
                 controlsSection.appendChild(prevDayBtn);
                 controlsSection.appendChild(nextDayBtn);
@@ -1069,6 +1097,29 @@
             }
             
             console.log('🗓️ Navigating to:', newDate, 'with slot finder active');
+            window.location.href = currentUrl.toString();
+        }
+
+        // COACH NAVIGATION FUNCTION
+        function navigateToCoach(coachId) {
+            const currentUrl = new URL(window.location);
+            
+            if (coachId && coachId !== '') {
+                // Navigate to specific coach
+                currentUrl.searchParams.set('coach', coachId);
+                console.log('👨‍🏫 Navigating to coach:', coachId, 'with slot finder active');
+            } else {
+                // Navigate to "All Coaches" (remove coach parameter)
+                currentUrl.searchParams.delete('coach');
+                console.log('👥 Navigating to All Coaches view with slot finder active');
+            }
+            
+            // Maintain slot finder parameters
+            if (slotFinderMode.active) {
+                currentUrl.searchParams.set('slot_finder_student', slotFinderMode.studentId);
+                currentUrl.searchParams.set('slot_finder_name', slotFinderMode.studentName);
+            }
+            
             window.location.href = currentUrl.toString();
         }
 

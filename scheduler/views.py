@@ -634,13 +634,27 @@ def get_available_slots_api(request, student_id):
                         'is_current_coach': group.coach == request.user.coach if group.coach else False
                     })
         
+        # Get all coaches for the dropdown
+        all_coaches = Coach.objects.select_related('user').filter(
+            scheduledgroup__term=current_term
+        ).distinct().order_by('user__first_name')
+        
+        coaches_list = []
+        for coach in all_coaches:
+            coaches_list.append({
+                'id': coach.id,
+                'name': str(coach),
+                'is_current': coach.id == request.user.coach.id
+            })
+        
         return JsonResponse({
             'success': True,
             'student_name': f"{student.first_name} {student.last_name}",
             'available_slots': available_slots,
             'total_slots': len(available_slots),
             'is_head_coach': True,
-            'current_coach_id': request.user.coach.id
+            'current_coach_id': request.user.coach.id,
+            'available_coaches': coaches_list
         })
         
     except Exception as e:
