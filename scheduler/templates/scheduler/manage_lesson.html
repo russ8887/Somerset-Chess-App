@@ -52,6 +52,53 @@
                 </table>
             </div>
 
+            {% if pending_fill_ins %}
+            <hr>
+            
+            <h5 class="card-title text-warning">
+                <i class="bi bi-exclamation-triangle me-2"></i>Problematic Fill-in Records
+            </h5>
+            <div class="alert alert-warning">
+                <strong>These students are stuck in PENDING status from previous fill-in attempts.</strong>
+                You can remove them to make them available for future fill-ins.
+            </div>
+            
+            <div class="table-responsive mb-4">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in pending_fill_ins %}
+                        <tr class="table-warning">
+                            <td>{{ record.enrollment.student }}</td>
+                            <td>
+                                <span class="badge bg-secondary">
+                                    <i class="bi bi-hourglass-split me-1"></i>{{ record.get_status_display }}
+                                </span>
+                                <small class="text-muted d-block">Stuck from previous fill-in attempt</small>
+                            </td>
+                            <td>
+                                <form method="post" style="display: inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="remove_pending_pk" value="{{ record.pk }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm" 
+                                            onclick="return confirm('Remove {{ record.enrollment.student }} from this lesson? They will become available for future fill-ins.')">
+                                        <i class="bi bi-trash me-1"></i>Remove
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
             <hr>
 
             <h5 class="card-title">Add Fill-in Student</h5>

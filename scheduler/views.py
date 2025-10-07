@@ -440,7 +440,7 @@ def manage_lesson_view(request, lesson_pk):
     term = lesson.scheduled_group.term
 
     if request.method == 'POST':
-        # This POST logic for adding/removing remains the same and is correct
+        # Enhanced POST logic to handle both FILL_IN and PENDING record removal
         if 'add_enrollment_pk' in request.POST:
             enrollment_to_add = get_object_or_404(Enrollment, pk=request.POST.get('add_enrollment_pk'))
             AttendanceRecord.objects.update_or_create(
@@ -448,10 +448,16 @@ def manage_lesson_view(request, lesson_pk):
                 enrollment=enrollment_to_add,
                 defaults={'status': 'FILL_IN'}
             )
-        if 'remove_record_pk' in request.POST:
+        elif 'remove_record_pk' in request.POST:
             record_to_remove = get_object_or_404(AttendanceRecord, pk=request.POST.get('remove_record_pk'))
-            if record_to_remove.status == 'FILL_IN':
+            # Allow removal of both FILL_IN and PENDING records
+            if record_to_remove.status in ['FILL_IN', 'PENDING']:
                 record_to_remove.delete()
+        elif 'remove_pending_pk' in request.POST:
+            # Specific handler for removing PENDING fill-in records
+            pending_record = get_object_or_404(AttendanceRecord, pk=request.POST.get('remove_pending_pk'))
+            if pending_record.status == 'PENDING':
+                pending_record.delete()
         return redirect('manage-lesson', lesson_pk=lesson.pk)
 
     # --- Prepare a SINGLE master list of candidates ---
@@ -500,13 +506,26 @@ def manage_lesson_view(request, lesson_pk):
     candidates_list.sort(key=lambda e: (-e.effective_deficit, e.actual_lessons))
 
     # Get the list of students currently in the lesson for display
-    current_records = lesson.attendancerecord_set.select_related(
+    # Separate PENDING records (problematic fill-ins) from active records
+    all_records = lesson.attendancerecord_set.select_related(
         'enrollment__student__school_class'
     ).order_by('enrollment__student__last_name')
+    
+    current_records = []
+    pending_fill_ins = []
+    
+    for record in all_records:
+        if record.status == 'PENDING':
+            # These are problematic fill-in records that need to be handled
+            pending_fill_ins.append(record)
+        else:
+            # These are normal active records (FILL_IN, PRESENT, ABSENT, etc.)
+            current_records.append(record)
 
     context = {
         'lesson': lesson,
         'current_records': current_records,
+        'pending_fill_ins': pending_fill_ins,
         'all_candidates': candidates_list,
     }
     return render(request, 'scheduler/manage_lesson.html', context)
