@@ -518,10 +518,18 @@ def mark_attendance(request, pk, status):
     record = get_object_or_404(AttendanceRecord, pk=pk)
     new_status = status.upper()
     
-    # Handle toggle behavior: if clicking the same status, go back to PENDING
-    if record.status == new_status:
+    # Special handling for FILL_IN students: when "undoing" FILL_IN, mark as ABSENT
+    # This preserves the record and any notes while removing them from active roster
+    if record.status == 'FILL_IN' and new_status == 'FILL_IN':
+        # Fill-in student being "undone" - mark as ABSENT to preserve history
+        record.status = 'ABSENT'
+        # Set a specific reason to indicate this was a fill-in attempt
+        record.reason_for_absence = 'OTHER'  # Could be expanded to have a specific fill-in reason
+    elif record.status == new_status:
+        # Standard toggle behavior: if clicking the same status, go back to PENDING
         record.status = 'PENDING'
     else:
+        # Standard status change
         record.status = new_status
     
     # Clear absence reason if not absent
