@@ -203,11 +203,16 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
 # --- Configuration for Enrollment Admin ---
 @admin.register(Enrollment)
 class EnrollmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'term', 'enrollment_type', 'target_lessons', 'lessons_carried_forward', 'adjusted_target', 'get_lesson_balance_display')
-    list_filter = ('term', 'enrollment_type')
-    search_fields = ('student__first_name', 'student__last_name')
-    fields = ('student', 'term', 'enrollment_type', 'target_lessons', 'lessons_carried_forward', 'adjusted_target')
+    list_display = ('student', 'term', 'enrollment_type', 'is_active', 'withdrawal_date', 'target_lessons', 'lessons_carried_forward', 'adjusted_target', 'get_lesson_balance_display')
+    list_filter = ('term', 'enrollment_type', 'is_active', 'withdrawal_date')
+    search_fields = ('student__first_name', 'student__last_name', 'withdrawal_reason')
+    fields = ('student', 'term', 'enrollment_type', 'is_active', 'withdrawal_date', 'withdrawal_reason', 'target_lessons', 'lessons_carried_forward', 'adjusted_target')
     readonly_fields = ('adjusted_target',)
+    list_editable = ('is_active',)  # Allow quick editing of active status
+    
+    def get_queryset(self, request):
+        """Add color coding for inactive students"""
+        return super().get_queryset(request).select_related('student', 'term')
     
     def get_lesson_balance_display(self, obj):
         balance = obj.get_lesson_balance()

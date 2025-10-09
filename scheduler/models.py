@@ -218,6 +218,22 @@ class Enrollment(models.Model):
         
     enrollment_type = models.CharField(max_length=5, choices=EnrollmentType.choices)
     
+    # Student status tracking
+    is_active = models.BooleanField(
+        default=True, 
+        help_text="Inactive students are removed from future lessons but keep historical records"
+    )
+    withdrawal_date = models.DateField(
+        null=True, 
+        blank=True, 
+        help_text="Date when student became inactive (optional)"
+    )
+    withdrawal_reason = models.CharField(
+        max_length=200, 
+        blank=True, 
+        help_text="Reason for withdrawal (optional)"
+    )
+    
     # Lesson balance tracking fields
     target_lessons = models.IntegerField(default=8, help_text="Target lessons for this term")
     lessons_carried_forward = models.IntegerField(default=0, help_text="Lessons owed from previous term (+) or credit (-)")
@@ -543,10 +559,11 @@ class LessonSession(models.Model):
             return existing_records
         
         # For today and future lessons, use current group members + fill-ins
-        current_members = self.scheduled_group.members.all()
+        # EXCLUDE INACTIVE ENROLLMENTS from future lessons
+        current_members = self.scheduled_group.members.filter(is_active=True)
         records = []
         
-        # 1. Create/get records for current group members
+        # 1. Create/get records for ACTIVE current group members only
         for enrollment in current_members:
             record, created = AttendanceRecord.objects.get_or_create(
                 lesson_session=self,
