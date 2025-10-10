@@ -5,6 +5,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
+from django.contrib import messages
 from django.db.models import Exists, OuterRef, Count, Q, F, Avg, Max, Min, Case, When, Value, FloatField
 from django.db import transaction
 from datetime import date, timedelta
@@ -251,6 +252,10 @@ class DashboardView(LoginRequiredMixin, ListView):
                 context['selected_coach_id'] = int(self.request.GET.get('coach', self.request.user.coach.id))
             except (ValueError, TypeError):
                 context['selected_coach_id'] = self.request.user.coach.id
+        
+        # Add time slots for the "Add Extra Lesson" form
+        context['time_slots'] = TimeSlot.objects.all().order_by('start_time')
+        
         return context
 
 @login_required
@@ -1268,3 +1273,61 @@ def _get_attendance_analytics(term, start_date, end_date):
             ).count() / total_records.count() * 100) if total_records.count() > 0 else 0, 1
         )
     }
+
+@login_required
+def add_extra_lesson(request):
+    """Simple view to add an extra lesson to any coach's schedule"""
+    if request.method == 'POST':
+        coach_id = request.POST.get('coach')
+        time_slot_id = request.POST.get('time_slot')
+        lesson_date = request.POST.get('date')
+        
+        try:
+            coach = get_object_or_404(Coach, pk=coach_id)
+            time_slot = get_object_or_404(TimeSlot, pk=time_slot_id)
+            lesson_date = date.fromisoformat(lesson_date)
+            
+            # Create a simple scheduled group for this extra lesson
+            # We'll use a naming convention to identify these as extra lessons
+            group_name = f"Extra Lesson - {coach} - {time_slot}"
+            
+            # Get or create a scheduled group for this coach/time combination
+            current_term = Term.get_active_term()
+            if not current_term:
+                messages.error(request, "No active term found.")
+                return redirect('dashboard')
+            
+            scheduled_group, created = ScheduledGroup.objects.get_or_create(
+                name=group_name,
+                coach=coach,
+                term=current_term,
+                time_slot=time_slot,
+                defaults={
+                    'day_of_week': lesson_date.weekday(),
+                    'group_type': 'GROUP',
+                    'target_skill_level': 'B',
+                    'max_capacity': 4
+                }
+            )
+            
+            # Create the lesson session
+            lesson_session, lesson_created = LessonSession.objects.get_or_create(
+                scheduled_group=scheduled_group,
+                lesson_date=lesson_date,
+                defaults={'status': 'SCHEDULED'}
+            )
+            
+            if lesson_created:
+                messages.success(request, f"Extra lesson added for {coach} on {lesson_date.strftime('%B %d, %Y')} at {time_slot}. You can now add students using the fill-in system.")
+            else:
+                messages.info(request, f"Lesson already exists for {coach} on {lesson_date.strftime('%B %d, %Y')} at {time_slot}.")
+            
+            # Redirect back to the dashboard for that date
+            return redirect(f"/?date={lesson_date.isoformat()}")
+            
+        except Exception as e:
+            messages.error(request, f"Error creating lesson: {str(e)}")
+            return redirect('dashboard')
+    
+    # For GET requests, redirect to dashboard
+    return redirect('dashboard')

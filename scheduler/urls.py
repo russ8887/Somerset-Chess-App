@@ -11,6 +11,7 @@ urlpatterns = [
     path('availability/', views.manage_availability, name='manage-availability'),
     path('student/<int:student_pk>/availability/', views.manage_student_availability, name='manage-student-availability'),
     path('analytics/', views.analytics_dashboard, name='analytics-dashboard'),
+    path('add-extra-lesson/', views.add_extra_lesson, name='add-extra-lesson'),
     
     # --- New Fill-in Management URL ---
     path('lesson/<int:lesson_pk>/manage/', views.manage_lesson_view, name='manage-lesson'),
