@@ -1,6 +1,7 @@
 # scheduler/admin.py
 
 from django.contrib import admin
+from django.db import models
 from .models import (
     Term, TimeSlot, SchoolClass, Coach, Student, Enrollment,
     ScheduledGroup, ScheduledUnavailability, OneOffEvent, LessonSession, AttendanceRecord, LessonNote
@@ -230,10 +231,74 @@ class EnrollmentAdmin(admin.ModelAdmin):
 # --- Configuration for Lesson Session Admin ---
 @admin.register(LessonSession)
 class LessonSessionAdmin(admin.ModelAdmin):
-    list_display = ('scheduled_group', 'lesson_date', 'status')
-    list_filter = ('status', 'lesson_date', 'scheduled_group__term')
-    search_fields = ('scheduled_group__name',)
-    ordering = ('-lesson_date',)
+    list_display = ('scheduled_group', 'lesson_date', 'status', 'get_coach_display', 'get_time_slot_display')
+    list_filter = ('status', 'lesson_date', 'scheduled_group__term', 'scheduled_group__coach')
+    search_fields = ('scheduled_group__name', 'scheduled_group__coach__user__first_name', 'scheduled_group__coach__user__last_name')
+    ordering = ('-lesson_date', 'scheduled_group__time_slot__start_time')
+    
+    fieldsets = (
+        ('Lesson Details', {
+            'fields': ('scheduled_group', 'lesson_date', 'status'),
+            'description': 'To create an ad-hoc lesson: Select an "Ad-hoc Lesson" group for your desired time slot, choose the date, and save. The empty lesson will appear on your dashboard ready for fill-in students.'
+        }),
+    )
+    
+    def get_queryset(self, request):
+        """Optimize queries and show ad-hoc lessons prominently"""
+        return super().get_queryset(request).select_related(
+            'scheduled_group__coach__user', 
+            'scheduled_group__time_slot',
+            'scheduled_group__term'
+        )
+    
+    @admin.display(description='Coach', ordering='scheduled_group__coach__user__first_name')
+    def get_coach_display(self, obj):
+        """Display the coach for this lesson"""
+        if obj.scheduled_group.coach:
+            return str(obj.scheduled_group.coach)
+        return "No Coach"
+    
+    @admin.display(description='Time Slot', ordering='scheduled_group__time_slot__start_time')
+    def get_time_slot_display(self, obj):
+        """Display the time slot for this lesson"""
+        if obj.scheduled_group.time_slot:
+            return str(obj.scheduled_group.time_slot)
+        return "No Time Set"
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Customize the scheduled group dropdown to highlight ad-hoc groups"""
+        if db_field.name == "scheduled_group":
+            # Order ad-hoc groups first, then regular groups
+            kwargs["queryset"] = ScheduledGroup.objects.select_related('coach__user', 'time_slot').order_by(
+                # Ad-hoc groups first (name starts with "Ad-hoc")
+                models.Case(
+                    models.When(name__startswith='Ad-hoc', then=models.Value(0)),
+                    default=models.Value(1),
+                    output_field=models.IntegerField()
+                ),
+                'coach__user__first_name',
+                'time_slot__start_time',
+                'name'
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def save_model(self, request, obj, form, change):
+        """Provide helpful feedback when creating lessons"""
+        super().save_model(request, obj, form, change)
+        from django.contrib import messages
+        
+        if not change:  # New lesson
+            if 'Ad-hoc' in obj.scheduled_group.name:
+                messages.success(
+                    request, 
+                    f'Ad-hoc lesson created successfully! "{obj.scheduled_group.name}" on {obj.lesson_date.strftime("%B %d, %Y")} '
+                    f'will appear on your dashboard. Use the fill-in management to add students.'
+                )
+            else:
+                messages.success(
+                    request,
+                    f'Lesson created for "{obj.scheduled_group.name}" on {obj.lesson_date.strftime("%B %d, %Y")}.'
+                )
 
 # --- Configuration for Lesson Note Admin ---
 @admin.register(LessonNote)
