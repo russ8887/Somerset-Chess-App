@@ -576,6 +576,21 @@ def save_reason(request, pk, reason_code):
     return render(request, 'scheduler/_lesson_detail.html', context)
 
 @login_required
+@require_POST
+def mark_fill_in_absent(request, pk):
+    """Mark a fill-in student as absent (preserving the record for analytics)"""
+    record = get_object_or_404(AttendanceRecord, pk=pk)
+    
+    # Only allow this action for FILL_IN students
+    if record.status == 'FILL_IN':
+        record.status = 'FILL_IN_ABSENT'
+        record.save()
+    
+    lesson = record.lesson_session
+    context = _prepare_lesson_context(lesson, request=request)
+    return render(request, 'scheduler/_lesson_detail.html', context)
+
+@login_required
 def create_note_view(request, record_pk):
     record = get_object_or_404(AttendanceRecord, pk=record_pk)
     note, created = LessonNote.objects.get_or_create(attendance_record=record)

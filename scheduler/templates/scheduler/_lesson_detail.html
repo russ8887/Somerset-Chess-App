@@ -42,7 +42,9 @@
                         </div>
                         
                         {% if record.status == 'FILL_IN' %}
-                            <span class="badge bg-info">Fill-in</span>
+                            <span class="badge bg-success">Fill-in</span>
+                        {% elif record.status == 'FILL_IN_ABSENT' %}
+                            <span class="badge bg-warning text-dark">Fill-in Absent</span>
                         {% endif %}
                         
                         {% if record.has_conflict %}
@@ -55,9 +57,16 @@
                 </div>
 
                 <div class="controls d-flex flex-wrap align-items-center gap-2">
-                    {% if record.status == 'PRESENT' or record.status == 'FILL_IN' %}
+                    {% if record.status == 'PRESENT' %}
                         <button class="btn btn-sm btn-success fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
                             <i class="bi bi-check-circle-fill me-1"></i>{{ record.get_status_display }}
+                        </button>
+                    {% elif record.status == 'FILL_IN' %}
+                        <button class="btn btn-sm btn-success fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
+                            <i class="bi bi-check-circle-fill me-1"></i>{{ record.get_status_display }}
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning fw-semibold" hx-post="{% url 'mark-fill-in-absent' record.pk %}" title="Mark fill-in student as absent">
+                            <i class="bi bi-person-x me-1"></i>Mark Fill-in Absent
                         </button>
                     {% elif record.status == 'SICK_PRESENT' %}
                         <button class="btn btn-sm btn-success fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
@@ -81,6 +90,10 @@
                             {% endfor %}
                             </div>
                         {% endif %}
+                    {% elif record.status == 'FILL_IN_ABSENT' %}
+                        <button class="btn btn-sm btn-warning fw-bold" hx-post="{% url 'mark-attendance' record.pk 'PENDING' %}" title="Click to undo">
+                            <i class="bi bi-person-x-fill me-1"></i>Fill-in Absent
+                        </button>
                     {% else %} {# Status is PENDING #}
                         <button class="btn btn-sm btn-outline-success fw-semibold" hx-post="{% url 'mark-attendance' record.pk 'PRESENT' %}">
                             <i class="bi bi-check-circle me-1"></i>Present

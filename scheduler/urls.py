@@ -19,6 +19,7 @@ urlpatterns = [
     # --- HTMX partials for Dashboard ---
     path('attendance/<int:pk>/mark/<str:status>/', views.mark_attendance, name='mark-attendance'),
     path('attendance/<int:pk>/reason/<str:reason_code>/', views.save_reason, name='save-reason'),
+    path('attendance/<int:pk>/mark-fill-in-absent/', views.mark_fill_in_absent, name='mark-fill-in-absent'),
     path('note/create/<int:record_pk>/', views.create_note_view, name='create-note'),
     path('note/<int:pk>/', views.view_lesson_note, name='view-note'),
     path('note/<int:pk>/edit/', views.edit_lesson_note, name='edit-note'),
