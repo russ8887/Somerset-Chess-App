@@ -1012,7 +1012,7 @@ def _get_student_analytics(term, start_date, end_date):
     """Calculate student progress analytics"""
     
     # Get all enrollments for the term
-    enrollments = Enrollment.objects.filter(term=term).select_related('student').annotate(
+    enrollments = Enrollment.objects.filter(term=term, is_active=True).select_related('student').annotate(
         total_lessons=Count('attendancerecord', filter=Q(
             attendancerecord__lesson_session__lesson_date__range=[start_date, end_date]
         )),
