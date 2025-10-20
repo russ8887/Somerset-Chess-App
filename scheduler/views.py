@@ -919,7 +919,7 @@ def edit_lesson_note(request, pk):
 
 @login_required
 def analytics_dashboard(request):
-    """Advanced analytics dashboard with comprehensive reporting"""
+    """Advanced analytics dashboard with comprehensive filtering and reporting"""
     
     # Check if user has permission (head coach or admin)
     if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach) and not request.user.is_staff:
@@ -953,9 +953,30 @@ def analytics_dashboard(request):
         else:
             end_date = current_term.end_date
         
-        # Student Progress Analytics
+        # Get filter parameters
+        filters = {
+            'status_filter': request.GET.getlist('status_filter'),
+            'absence_reason_filter': request.GET.getlist('absence_reason_filter'),
+            'lesson_balance_filter': request.GET.get('lesson_balance_filter'),
+            'student_status_filter': request.GET.get('student_status_filter'),
+            'coach_filter': request.GET.get('coach_filter'),
+        }
+        
+        # Handle export request
+        if request.GET.get('export') == 'csv':
+            return _export_analytics_csv(current_term, start_date, end_date, filters)
+        
+        # Get filtered student list for "Present Sick" and other filters
+        filtered_students = None
+        filtered_student_count = 0
+        
+        if any(filters.values()):
+            filtered_students = _get_filtered_students(current_term, start_date, end_date, filters)
+            filtered_student_count = len(filtered_students)
+        
+        # Student Progress Analytics (with filtering)
         try:
-            student_analytics = _get_student_analytics(current_term, start_date, end_date)
+            student_analytics = _get_student_analytics(current_term, start_date, end_date, filters)
         except Exception as e:
             student_analytics = {
                 'total_students': 0, 'students_behind': 0, 'students_on_track': 0,
@@ -965,13 +986,13 @@ def analytics_dashboard(request):
         
         # Coach Performance Metrics
         try:
-            coach_analytics = _get_coach_analytics(current_term, start_date, end_date)
+            coach_analytics = _get_coach_analytics(current_term, start_date, end_date, filters)
         except Exception as e:
             coach_analytics = []
         
         # System Utilization Insights
         try:
-            utilization_analytics = _get_utilization_analytics(current_term, start_date, end_date)
+            utilization_analytics = _get_utilization_analytics(current_term, start_date, end_date, filters)
         except Exception as e:
             utilization_analytics = {
                 'time_slot_utilization': [], 'day_utilization': [],
@@ -982,12 +1003,17 @@ def analytics_dashboard(request):
         
         # Attendance Pattern Analysis
         try:
-            attendance_analytics = _get_attendance_analytics(current_term, start_date, end_date)
+            attendance_analytics = _get_attendance_analytics(current_term, start_date, end_date, filters)
         except Exception as e:
             attendance_analytics = {
                 'total_records': 0, 'attendance_breakdown': [], 'absence_reasons': [],
                 'weekly_trends': [], 'overall_attendance_rate': 0
             }
+        
+        # Get available coaches for filter dropdown
+        available_coaches = Coach.objects.select_related('user').filter(
+            scheduledgroup__term=current_term
+        ).distinct().order_by('user__first_name')
         
         context = {
             'current_term': current_term,
@@ -997,6 +1023,10 @@ def analytics_dashboard(request):
             'coach_analytics': coach_analytics,
             'utilization_analytics': utilization_analytics,
             'attendance_analytics': attendance_analytics,
+            'available_coaches': available_coaches,
+            'filtered_students': filtered_students,
+            'filtered_student_count': filtered_student_count,
+            'active_filters': filters,
         }
         
         return render(request, 'scheduler/analytics_dashboard.html', context)
@@ -1008,8 +1038,118 @@ def analytics_dashboard(request):
         })
 
 
-def _get_student_analytics(term, start_date, end_date):
-    """Calculate student progress analytics"""
+def _get_filtered_students(term, start_date, end_date, filters):
+    """Get filtered list of students based on filter criteria"""
+    
+    # Start with base query
+    base_query = AttendanceRecord.objects.filter(
+        enrollment__term=term,
+        lesson_session__lesson_date__range=[start_date, end_date]
+    ).select_related('enrollment__student', 'lesson_session__scheduled_group')
+    
+    # Apply status filters
+    if filters.get('status_filter'):
+        base_query = base_query.filter(status__in=filters['status_filter'])
+    
+    # Apply absence reason filters
+    if filters.get('absence_reason_filter'):
+        base_query = base_query.filter(reason_for_absence__in=filters['absence_reason_filter'])
+    
+    # Apply coach filter
+    if filters.get('coach_filter'):
+        base_query = base_query.filter(lesson_session__scheduled_group__coach_id=filters['coach_filter'])
+    
+    # Apply student status filter
+    if filters.get('student_status_filter'):
+        if filters['student_status_filter'] == 'active':
+            base_query = base_query.filter(enrollment__is_active=True)
+        elif filters['student_status_filter'] == 'inactive':
+            base_query = base_query.filter(enrollment__is_active=False)
+    
+    # Get unique students from filtered records
+    student_records = []
+    seen_students = set()
+    
+    for record in base_query:
+        student_key = (record.enrollment.student.id, record.enrollment.student.first_name, record.enrollment.student.last_name)
+        if student_key not in seen_students:
+            seen_students.add(student_key)
+            
+            # Apply lesson balance filter if specified
+            if filters.get('lesson_balance_filter'):
+                balance = record.enrollment.get_lesson_balance()
+                
+                if filters['lesson_balance_filter'] == 'behind' and balance <= 0:
+                    continue
+                elif filters['lesson_balance_filter'] == 'very_behind' and balance < 3:
+                    continue
+                elif filters['lesson_balance_filter'] == 'on_track' and (balance < -1 or balance > 2):
+                    continue
+                elif filters['lesson_balance_filter'] == 'ahead' and balance >= 0:
+                    continue
+            
+            student_records.append({
+                'student': record.enrollment.student,
+                'enrollment': record.enrollment,
+                'record': record,
+                'lesson_balance': record.enrollment.get_lesson_balance()
+            })
+    
+    return student_records
+
+
+def _export_analytics_csv(term, start_date, end_date, filters):
+    """Export filtered analytics data as CSV"""
+    import csv
+    from django.http import HttpResponse
+    
+    # Get filtered students
+    filtered_students = _get_filtered_students(term, start_date, end_date, filters)
+    
+    # Create CSV response
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="analytics_export_{start_date}_{end_date}.csv"'
+    
+    writer = csv.writer(response)
+    
+    # Write header
+    writer.writerow([
+        'Student Name', 'Skill Level', 'Year Level', 'School Class',
+        'Enrollment Type', 'Status', 'Lesson Balance', 'Target Lessons',
+        'Attended Lessons', 'Coach', 'Last Attendance Status', 'Last Lesson Date'
+    ])
+    
+    # Write data
+    for student_data in filtered_students:
+        student = student_data['student']
+        enrollment = student_data['enrollment']
+        record = student_data['record']
+        
+        writer.writerow([
+            f"{student.first_name} {student.last_name}",
+            student.get_skill_level_display(),
+            student.year_level,
+            student.school_class.name if student.school_class else 'N/A',
+            enrollment.get_enrollment_type_display(),
+            'Active' if enrollment.is_active else 'Inactive',
+            enrollment.get_lesson_balance(),
+            enrollment.adjusted_target,
+            enrollment.attendancerecord_set.filter(
+                status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+            ).count(),
+            record.lesson_session.scheduled_group.coach if record.lesson_session.scheduled_group.coach else 'N/A',
+            record.get_status_display(),
+            record.lesson_session.lesson_date
+        ])
+    
+    return response
+
+
+def _get_student_analytics(term, start_date, end_date, filters=None):
+    """Calculate student progress analytics with optional filtering"""
+    
+    if filters is None:
+        filters = {}
     
     # Get all enrollments for the term
     enrollments = Enrollment.objects.filter(term=term, is_active=True).select_related('student').annotate(
@@ -1084,8 +1224,11 @@ def _get_student_analytics(term, start_date, end_date):
     }
 
 
-def _get_coach_analytics(term, start_date, end_date):
-    """Calculate coach performance metrics"""
+def _get_coach_analytics(term, start_date, end_date, filters=None):
+    """Calculate coach performance metrics with optional filtering"""
+    
+    if filters is None:
+        filters = {}
     
     coaches = Coach.objects.all().select_related('user').annotate(
         total_lessons=Count('scheduledgroup__lessonsession', filter=Q(
@@ -1137,8 +1280,11 @@ def _get_coach_analytics(term, start_date, end_date):
     return coach_stats
 
 
-def _get_utilization_analytics(term, start_date, end_date):
-    """Calculate system utilization insights"""
+def _get_utilization_analytics(term, start_date, end_date, filters=None):
+    """Calculate system utilization insights with optional filtering"""
+    
+    if filters is None:
+        filters = {}
     
     # Time slot utilization
     time_slots = TimeSlot.objects.all().annotate(

@@ -67,28 +67,167 @@
                 </div>
             {% else %}
 
-            <!-- Date Range Filter -->
+            <!-- Enhanced Filter Section -->
             <div class="filter-section">
-                <form method="GET" class="row align-items-end">
-                    <div class="col-md-3">
-                        <label for="start_date" class="form-label">Start Date</label>
-                        <input type="date" class="form-control" id="start_date" name="start_date" 
-                               value="{{ start_date|date:'Y-m-d' }}">
+                <form method="GET" id="analyticsFilterForm">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h5><i class="fas fa-filter"></i> Analytics Filters</h5>
+                        </div>
                     </div>
-                    <div class="col-md-3">
-                        <label for="end_date" class="form-label">End Date</label>
-                        <input type="date" class="form-control" id="end_date" name="end_date" 
-                               value="{{ end_date|date:'Y-m-d' }}">
+                    
+                    <!-- Date Range -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" 
+                                   value="{{ start_date|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" 
+                                   value="{{ end_date|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Quick Date Ranges</label>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setDateRange('week')">This Week</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setDateRange('month')">This Month</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setDateRange('term')">Full Term</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-3">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-filter"></i> Update Report
-                        </button>
+
+                    <!-- Attendance Status Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Attendance Status</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status_filter" value="PRESENT" id="status_present"
+                                               {% if 'PRESENT' in request.GET.status_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="status_present">Present</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status_filter" value="SICK_PRESENT" id="status_sick_present"
+                                               {% if 'SICK_PRESENT' in request.GET.status_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="status_sick_present">
+                                            <span class="badge bg-warning">Present Sick</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status_filter" value="REFUSES_PRESENT" id="status_refuses_present"
+                                               {% if 'REFUSES_PRESENT' in request.GET.status_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="status_refuses_present">Present but Refuses</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status_filter" value="ABSENT" id="status_absent"
+                                               {% if 'ABSENT' in request.GET.status_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="status_absent">Absent</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status_filter" value="FILL_IN" id="status_fill_in"
+                                               {% if 'FILL_IN' in request.GET.status_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="status_fill_in">Fill-in</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status_filter" value="FILL_IN_ABSENT" id="status_fill_in_absent"
+                                               {% if 'FILL_IN_ABSENT' in request.GET.status_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="status_fill_in_absent">Fill-in Absent</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Absence Reason Filters -->
+                        <div class="col-md-6">
+                            <label class="form-label">Absence Reasons</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="absence_reason_filter" value="SICK" id="reason_sick"
+                                               {% if 'SICK' in request.GET.absence_reason_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="reason_sick">Sick</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="absence_reason_filter" value="TEACHER_REFUSAL" id="reason_teacher"
+                                               {% if 'TEACHER_REFUSAL' in request.GET.absence_reason_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="reason_teacher">Teacher Refusal</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="absence_reason_filter" value="CLASS_EVENT" id="reason_class_event"
+                                               {% if 'CLASS_EVENT' in request.GET.absence_reason_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="reason_class_event">Class Event</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="absence_reason_filter" value="OTHER" id="reason_other"
+                                               {% if 'OTHER' in request.GET.absence_reason_filter %}checked{% endif %}>
+                                        <label class="form-check-label" for="reason_other">Other</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="col-md-3 text-end">
-                        <small class="text-muted">
-                            Showing data from {{ start_date|date:'M j, Y' }} to {{ end_date|date:'M j, Y' }}
-                        </small>
+
+                    <!-- Lesson Balance and Student Status Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="lesson_balance_filter" class="form-label">Lesson Balance</label>
+                            <select class="form-select" name="lesson_balance_filter" id="lesson_balance_filter">
+                                <option value="">All Students</option>
+                                <option value="behind" {% if request.GET.lesson_balance_filter == 'behind' %}selected{% endif %}>Behind Schedule (Owes 1+ lessons)</option>
+                                <option value="very_behind" {% if request.GET.lesson_balance_filter == 'very_behind' %}selected{% endif %}>Very Behind (Owes 3+ lessons)</option>
+                                <option value="on_track" {% if request.GET.lesson_balance_filter == 'on_track' %}selected{% endif %}>On Track</option>
+                                <option value="ahead" {% if request.GET.lesson_balance_filter == 'ahead' %}selected{% endif %}>Ahead (Has Credit)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="student_status_filter" class="form-label">Student Status</label>
+                            <select class="form-select" name="student_status_filter" id="student_status_filter">
+                                <option value="">All Students</option>
+                                <option value="active" {% if request.GET.student_status_filter == 'active' %}selected{% endif %}>Active Only</option>
+                                <option value="inactive" {% if request.GET.student_status_filter == 'inactive' %}selected{% endif %}>Inactive Only</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="coach_filter" class="form-label">Coach</label>
+                            <select class="form-select" name="coach_filter" id="coach_filter">
+                                <option value="">All Coaches</option>
+                                {% for coach in available_coaches %}
+                                <option value="{{ coach.id }}" {% if request.GET.coach_filter == coach.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ coach.user.first_name }} {{ coach.user.last_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="row">
+                        <div class="col-md-12">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="clearFilters()">
+                                <i class="fas fa-times"></i> Clear Filters
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="exportData()">
+                                <i class="fas fa-download"></i> Export Data
+                            </button>
+                            <div class="float-end">
+                                <small class="text-muted">
+                                    Showing data from {{ start_date|date:'M j, Y' }} to {{ end_date|date:'M j, Y' }}
+                                    {% if filtered_student_count %}
+                                    | {{ filtered_student_count }} students match filters
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -356,6 +495,78 @@
 {{ attendance_analytics|json_script:"attendance-data" }}
 
 <script>
+// Filter helper functions
+function setDateRange(range) {
+    const today = new Date();
+    const startDateInput = document.getElementById('start_date');
+    const endDateInput = document.getElementById('end_date');
+    
+    let startDate, endDate;
+    
+    switch(range) {
+        case 'week':
+            startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+            endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + 6);
+            break;
+        case 'month':
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            break;
+        case 'term':
+            // Use the current term dates - these would be passed from Django
+            return; // Let the backend handle this
+        default:
+            return;
+    }
+    
+    startDateInput.value = startDate.toISOString().split('T')[0];
+    endDateInput.value = endDate.toISOString().split('T')[0];
+}
+
+function clearFilters() {
+    // Clear all form inputs
+    const form = document.getElementById('analyticsFilterForm');
+    const inputs = form.querySelectorAll('input[type="checkbox"], select');
+    
+    inputs.forEach(input => {
+        if (input.type === 'checkbox') {
+            input.checked = false;
+        } else if (input.tagName === 'SELECT') {
+            input.selectedIndex = 0;
+        }
+    });
+    
+    // Submit the form to clear filters
+    form.submit();
+}
+
+function exportData() {
+    // Get current form data
+    const form = document.getElementById('analyticsFilterForm');
+    const formData = new FormData(form);
+    
+    // Add export parameter
+    formData.append('export', 'csv');
+    
+    // Create a temporary form for export
+    const exportForm = document.createElement('form');
+    exportForm.method = 'GET';
+    exportForm.action = window.location.pathname;
+    
+    // Add all form data as hidden inputs
+    for (let [key, value] of formData.entries()) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = value;
+        exportForm.appendChild(input);
+    }
+    
+    document.body.appendChild(exportForm);
+    exportForm.submit();
+    document.body.removeChild(exportForm);
+}
+
 // Chart.js configurations
 document.addEventListener('DOMContentLoaded', function() {
     // Get data from Django
