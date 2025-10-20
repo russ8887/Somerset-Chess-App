@@ -471,7 +471,7 @@ def manage_lesson_view(request, lesson_pk):
     present_student_ids = lesson.attendancerecord_set.all().values_list('enrollment__student_id', flat=True)
 
     # 2. Get all enrollments for the term, excluding those already in the lesson
-    all_candidates = Enrollment.objects.filter(term=term) \
+    all_candidates = Enrollment.objects.filter(term=term, is_active=True) \
         .exclude(student_id__in=present_student_ids) \
         .select_related('student__school_class') \
         .annotate(
