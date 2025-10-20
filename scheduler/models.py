@@ -608,6 +608,7 @@ class AttendanceRecord(models.Model):
         PRESENT = 'PRESENT', 'Present'
         ABSENT = 'ABSENT', 'Absent'
         FILL_IN = 'FILL_IN', 'Fill-in'
+        FILL_IN_ABSENT = 'FILL_IN_ABSENT', 'Fill-in Absent'
         SICK_PRESENT = 'SICK_PRESENT', 'Sick but Present'
         REFUSES_PRESENT = 'REFUSES_PRESENT', 'Present but Refuses'
 
