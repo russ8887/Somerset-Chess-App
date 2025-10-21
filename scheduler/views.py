@@ -1396,8 +1396,11 @@ def _get_utilization_analytics(term, start_date, end_date, filters=None):
     }
 
 
-def _get_attendance_analytics(term, start_date, end_date):
+def _get_attendance_analytics(term, start_date, end_date, filters=None):
     """Calculate attendance pattern analysis"""
+    
+    if filters is None:
+        filters = {}
     
     # Overall attendance statistics
     total_records = AttendanceRecord.objects.filter(
@@ -1467,8 +1470,6 @@ def _get_all_students_overview(term, sort_by='lessons_owed', sort_order='desc'):
         is_active=True
     ).select_related(
         'student__school_class'
-    ).prefetch_related(
-        'student__enrollment_set__scheduledgroup_set__coach__user'
     ).annotate(
         attended_lessons=Count('attendancerecord', filter=Q(
             attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
