@@ -572,11 +572,11 @@ class LessonSession(models.Model):
             )
             records.append(record)
         
-        # 2. Get any existing fill-in records that aren't already included
+        # 2. Get any existing fill-in records that aren't already included (both FILL_IN and FILL_IN_ABSENT)
         existing_enrollment_ids = [enrollment.id for enrollment in current_members]
         fill_in_records = AttendanceRecord.objects.filter(
             lesson_session=self,
-            status='FILL_IN'
+            status__in=['FILL_IN', 'FILL_IN_ABSENT']
         ).exclude(enrollment_id__in=existing_enrollment_ids)
         
         # Add fill-in records to the list
