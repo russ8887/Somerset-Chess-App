@@ -257,27 +257,51 @@
                                 </td>
                                 <td>
                                     {% if student_data.record.status == 'SICK_PRESENT' %}
-                                        <span class="badge bg-warning text-dark">
+                                        <span class="badge bg-warning text-dark editable-status" 
+                                              data-record-id="{{ student_data.record.id }}"
+                                              data-student-id="{{ student_data.student.id }}" 
+                                              data-current-status="SICK_PRESENT"
+                                              title="Click to edit status">
                                             <i class="fas fa-thermometer-half me-1"></i>Present Sick
                                         </span>
                                     {% elif student_data.record.status == 'PRESENT' %}
-                                        <span class="badge bg-success">
+                                        <span class="badge bg-success editable-status"
+                                              data-record-id="{{ student_data.record.id }}"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="PRESENT"
+                                              title="Click to edit status">
                                             <i class="fas fa-check me-1"></i>Present
                                         </span>
                                     {% elif student_data.record.status == 'ABSENT' %}
-                                        <span class="badge bg-danger">
+                                        <span class="badge bg-danger editable-status"
+                                              data-record-id="{{ student_data.record.id }}"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="ABSENT"
+                                              title="Click to edit status">
                                             <i class="fas fa-times me-1"></i>Absent
                                         </span>
                                     {% elif student_data.record.status == 'FILL_IN' %}
-                                        <span class="badge bg-info">
+                                        <span class="badge bg-info editable-status"
+                                              data-record-id="{{ student_data.record.id }}"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="FILL_IN"
+                                              title="Click to edit status">
                                             <i class="fas fa-plus me-1"></i>Fill-in
                                         </span>
                                     {% elif student_data.record.status == 'FILL_IN_ABSENT' %}
-                                        <span class="badge bg-warning text-dark">
+                                        <span class="badge bg-warning text-dark editable-status"
+                                              data-record-id="{{ student_data.record.id }}"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="FILL_IN_ABSENT"
+                                              title="Click to edit status">
                                             <i class="fas fa-person-x me-1"></i>Fill-in Absent
                                         </span>
                                     {% elif student_data.record.status == 'REFUSES_PRESENT' %}
-                                        <span class="badge bg-warning text-dark">
+                                        <span class="badge bg-warning text-dark editable-status"
+                                              data-record-id="{{ student_data.record.id }}"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="REFUSES_PRESENT"
+                                              title="Click to edit status">
                                             <i class="fas fa-exclamation-triangle me-1"></i>Present Refuses
                                         </span>
                                     {% else %}
@@ -1042,13 +1066,127 @@ function showStatusChangeModal(studentId, currentStatus, badgeElement) {
 }
 
 function changeStudentStatus(studentId, newStatus, buttonElement) {
-    // For now, just show an alert - we'll implement the actual AJAX call later
-    alert(`Status change functionality will be implemented in the next update.\n\nStudent ID: ${studentId}\nNew Status: ${newStatus}`);
+    // Get the record ID from the badge element
+    const badge = document.querySelector(`[data-student-id="${studentId}"].editable-status`);
+    const recordId = badge ? badge.getAttribute('data-record-id') : null;
     
-    // Close the modal
-    const modal = buttonElement.closest('.modal');
-    const bootstrapModal = bootstrap.Modal.getInstance(modal);
-    bootstrapModal.hide();
+    if (!recordId) {
+        alert('Error: Could not find attendance record to update.');
+        return;
+    }
+    
+    // Show loading state
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+    
+    // Make AJAX request
+    fetch('/analytics/change-status/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+            record_id: recordId,
+            new_status: newStatus
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the badge with new status
+            updateStatusBadge(badge, newStatus);
+            
+            // Show success message
+            showSuccessMessage(data.message);
+            
+            // Close the modal
+            const modal = buttonElement.closest('.modal');
+            const bootstrapModal = bootstrap.Modal.getInstance(modal);
+            bootstrapModal.hide();
+            
+        } else {
+            alert('Error updating status: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating status. Please try again.');
+    })
+    .finally(() => {
+        // Reset button state
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = buttonElement.getAttribute('data-original-text') || 'Update Status';
+    });
+}
+
+function updateStatusBadge(badge, newStatus) {
+    // Update the badge based on the new status
+    const statusConfig = {
+        'SICK_PRESENT': {
+            class: 'badge bg-warning text-dark',
+            icon: 'fas fa-thermometer-half',
+            text: 'Present Sick'
+        },
+        'PRESENT': {
+            class: 'badge bg-success',
+            icon: 'fas fa-check',
+            text: 'Present'
+        },
+        'ABSENT': {
+            class: 'badge bg-danger',
+            icon: 'fas fa-times', 
+            text: 'Absent'
+        },
+        'FILL_IN': {
+            class: 'badge bg-info',
+            icon: 'fas fa-plus',
+            text: 'Fill-in'
+        }
+    };
+    
+    const config = statusConfig[newStatus];
+    if (config) {
+        badge.className = `${config.class} editable-status`;
+        badge.setAttribute('data-current-status', newStatus);
+        badge.innerHTML = `<i class="${config.icon} me-1"></i>${config.text}`;
+    }
+}
+
+function showSuccessMessage(message) {
+    // Create a temporary success alert
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+    alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
+    alert.innerHTML = `
+        <i class="fas fa-check-circle me-2"></i>${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alert);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        if (alert && alert.parentNode) {
+            alert.parentNode.removeChild(alert);
+        }
+    }, 4000);
+}
+
+function getCsrfToken() {
+    // Get CSRF token from cookie or meta tag
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'csrftoken') {
+            return value;
+        }
+    }
+    
+    // Fallback: try to get from meta tag
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    return csrfMeta ? csrfMeta.getAttribute('content') : '';
 }
 
 // Chart.js configurations

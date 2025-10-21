@@ -1589,6 +1589,59 @@ def _get_all_students_overview(term, sort_by='lessons_owed', sort_order='desc'):
 
 
 @login_required
+@require_POST
+def change_attendance_status_analytics(request):
+    """AJAX endpoint to change attendance status from analytics dashboard"""
+    
+    # Ensure this is only accessible to head coaches
+    if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach) and not request.user.is_staff:
+        return JsonResponse({'success': False, 'error': 'Permission denied'})
+    
+    try:
+        import json
+        data = json.loads(request.body)
+        record_id = data.get('record_id')
+        new_status = data.get('new_status')
+        
+        if not record_id or not new_status:
+            return JsonResponse({'success': False, 'error': 'Missing required parameters'})
+        
+        # Get the attendance record
+        record = get_object_or_404(AttendanceRecord, id=record_id)
+        
+        # Validate the new status
+        valid_statuses = [choice[0] for choice in AttendanceRecord.StatusChoices.choices]
+        if new_status not in valid_statuses:
+            return JsonResponse({'success': False, 'error': 'Invalid status'})
+        
+        # Update the record
+        old_status = record.status
+        record.status = new_status
+        
+        # Clear absence reason if not absent
+        if new_status != 'ABSENT':
+            record.reason_for_absence = None
+        
+        record.save()
+        
+        # Get student info for response
+        student = record.enrollment.student
+        student_name = f"{student.first_name} {student.last_name}"
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully changed {student_name} from {old_status} to {new_status}',
+            'student_name': student_name,
+            'old_status': old_status,
+            'new_status': new_status,
+            'new_status_display': record.get_status_display()
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
 def add_extra_lesson(request):
     """Simple view to add an extra lesson to any coach's schedule"""
     if request.method == 'POST':
