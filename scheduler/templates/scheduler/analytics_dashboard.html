@@ -345,6 +345,235 @@
             </div>
             {% endif %}
 
+            <!-- All Students Overview -->
+            <div class="analytics-card">
+                <h3><i class="fas fa-users"></i> All Students Overview ({{ all_students_overview|length }})</h3>
+                
+                <!-- Search/Filter Bar -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="studentSearch" placeholder="Search students..." onkeyup="filterStudents()">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <small class="text-muted">
+                            <i class="fas fa-sort"></i> Click column headers to sort
+                        </small>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="studentsOverviewTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th class="sortable" data-sort="student_name">
+                                    Student Name 
+                                    {% if sort_by == 'student_name' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="lessons_owed">
+                                    Lessons Owed 
+                                    {% if sort_by == 'lessons_owed' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th>Progress</th>
+                                <th class="sortable" data-sort="attendance_rate">
+                                    Attendance Rate
+                                    {% if sort_by == 'attendance_rate' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="coach">
+                                    Coach
+                                    {% if sort_by == 'coach' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="group_type">
+                                    Group Type
+                                    {% if sort_by == 'group_type' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="school_class">
+                                    Class
+                                    {% if sort_by == 'school_class' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="skill_level">
+                                    Skill Level
+                                    {% if sort_by == 'skill_level' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="last_status">
+                                    Last Status
+                                    {% if sort_by == 'last_status' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                                <th class="sortable" data-sort="days_since_last">
+                                    Days Since Last
+                                    {% if sort_by == 'days_since_last' %}
+                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                    {% else %}
+                                        <i class="fas fa-sort text-muted"></i>
+                                    {% endif %}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student_data in all_students_overview %}
+                            <tr class="student-row" data-student-id="{{ student_data.student.id }}">
+                                <td>
+                                    <strong>{{ student_data.student_name }}</strong>
+                                    <br><small class="text-muted">Year {{ student_data.year_level }}</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ student_data.balance_color }}">
+                                        {% if student_data.lessons_owed > 0 %}
+                                            {{ student_data.lessons_owed }} owed
+                                        {% elif student_data.lessons_owed < 0 %}
+                                            {{ student_data.lessons_owed|floatformat:0|slice:"1:" }} credit
+                                        {% else %}
+                                            On track
+                                        {% endif %}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="progress progress-bar-custom">
+                                        {% widthratio student_data.attended_lessons student_data.target_lessons 100 as progress_pct %}
+                                        <div class="progress-bar bg-{% if progress_pct < 50 %}danger{% elif progress_pct < 80 %}warning{% else %}success{% endif %}" 
+                                             style="width: {{ progress_pct|default:0 }}%">
+                                            {{ student_data.attended_lessons }}/{{ student_data.target_lessons }}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if student_data.attendance_rate >= 90 %}success{% elif student_data.attendance_rate >= 75 %}warning{% else %}danger{% endif %}">
+                                        {{ student_data.attendance_rate }}%
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ student_data.coaches }}</small>
+                                </td>
+                                <td>
+                                    <small>{{ student_data.group_types }}</small>
+                                </td>
+                                <td>{{ student_data.school_class }}</td>
+                                <td>
+                                    <span class="badge bg-{% if student_data.student.skill_level == 'B' %}primary{% elif student_data.student.skill_level == 'I' %}warning{% else %}success{% endif %}">
+                                        {{ student_data.skill_level }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if student_data.last_status == 'Sick but Present' %}
+                                        <span class="badge bg-warning text-dark editable-status" 
+                                              data-student-id="{{ student_data.student.id }}" 
+                                              data-current-status="SICK_PRESENT"
+                                              title="Click to edit status">
+                                            <i class="fas fa-thermometer-half me-1"></i>Present Sick
+                                        </span>
+                                    {% elif student_data.last_status == 'Present' %}
+                                        <span class="badge bg-success editable-status"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="PRESENT"
+                                              title="Click to edit status">
+                                            <i class="fas fa-check me-1"></i>Present
+                                        </span>
+                                    {% elif student_data.last_status == 'Absent' %}
+                                        <span class="badge bg-danger editable-status"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="ABSENT"
+                                              title="Click to edit status">
+                                            <i class="fas fa-times me-1"></i>Absent
+                                        </span>
+                                    {% elif student_data.last_status == 'Fill-in' %}
+                                        <span class="badge bg-info editable-status"
+                                              data-student-id="{{ student_data.student.id }}"
+                                              data-current-status="FILL_IN"
+                                              title="Click to edit status">
+                                            <i class="fas fa-plus me-1"></i>Fill-in
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ student_data.last_status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if student_data.days_since_last %}
+                                        {% if student_data.days_since_last > 14 %}
+                                            <span class="badge bg-danger">{{ student_data.days_since_last }} days</span>
+                                        {% elif student_data.days_since_last > 7 %}
+                                            <span class="badge bg-warning text-dark">{{ student_data.days_since_last }} days</span>
+                                        {% else %}
+                                            <span class="badge bg-success">{{ student_data.days_since_last }} days</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">Never</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="10" class="text-center text-muted">
+                                    No students found for the current term.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Summary Statistics -->
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <div class="metric-card bg-danger text-white">
+                            <div class="metric-value">{{ all_students_overview|length|add:"-"|length }}</div>
+                            <div class="metric-label">Very Behind (3+ owed)</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card bg-warning text-dark">
+                            <div class="metric-value">{{ all_students_overview|length|add:"-"|length }}</div>
+                            <div class="metric-label">Behind (1+ owed)</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card bg-success text-white">
+                            <div class="metric-value">{{ all_students_overview|length|add:"-"|length }}</div>
+                            <div class="metric-label">On Track</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-card bg-info text-white">
+                            <div class="metric-value">{{ all_students_overview|length|add:"-"|length }}</div>
+                            <div class="metric-label">Ahead (Credit)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Student Progress Overview -->
             <div class="analytics-card">
                 <h3><i class="fas fa-users"></i> Student Progress Overview</h3>
@@ -678,6 +907,148 @@ function exportData() {
     document.body.appendChild(exportForm);
     exportForm.submit();
     document.body.removeChild(exportForm);
+}
+
+// Student table filtering and sorting
+function filterStudents() {
+    const searchTerm = document.getElementById('studentSearch').value.toLowerCase();
+    const rows = document.querySelectorAll('#studentsOverviewTable tbody .student-row');
+    
+    rows.forEach(row => {
+        const studentName = row.cells[0].textContent.toLowerCase();
+        const coach = row.cells[4].textContent.toLowerCase();
+        const schoolClass = row.cells[6].textContent.toLowerCase();
+        
+        if (studentName.includes(searchTerm) || coach.includes(searchTerm) || schoolClass.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Table sorting functionality
+function sortTable(sortBy) {
+    const currentSort = new URLSearchParams(window.location.search).get('sort');
+    const currentOrder = new URLSearchParams(window.location.search).get('order') || 'desc';
+    
+    let newOrder = 'desc';
+    if (currentSort === sortBy && currentOrder === 'desc') {
+        newOrder = 'asc';
+    }
+    
+    const url = new URL(window.location);
+    url.searchParams.set('sort', sortBy);
+    url.searchParams.set('order', newOrder);
+    
+    window.location.href = url.toString();
+}
+
+// Add click handlers to sortable headers
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', function() {
+            const sortBy = this.getAttribute('data-sort');
+            sortTable(sortBy);
+        });
+    });
+    
+    // Add hover effect to sortable headers
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+        });
+        header.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+        });
+    });
+});
+
+// Inline status editing functionality
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.editable-status').forEach(badge => {
+        badge.style.cursor = 'pointer';
+        badge.addEventListener('click', function(e) {
+            e.preventDefault();
+            const studentId = this.getAttribute('data-student-id');
+            const currentStatus = this.getAttribute('data-current-status');
+            
+            // Show status change dropdown
+            showStatusChangeModal(studentId, currentStatus, this);
+        });
+    });
+});
+
+function showStatusChangeModal(studentId, currentStatus, badgeElement) {
+    // Create a simple dropdown for status change
+    const statusOptions = {
+        'SICK_PRESENT': [
+            {value: 'ABSENT', label: 'Change to Absent', color: 'danger'},
+            {value: 'PRESENT', label: 'Change to Present', color: 'success'}
+        ],
+        'PRESENT': [
+            {value: 'ABSENT', label: 'Change to Absent', color: 'danger'},
+            {value: 'SICK_PRESENT', label: 'Change to Present Sick', color: 'warning'}
+        ],
+        'ABSENT': [
+            {value: 'PRESENT', label: 'Change to Present', color: 'success'},
+            {value: 'SICK_PRESENT', label: 'Change to Present Sick', color: 'warning'}
+        ],
+        'FILL_IN': [
+            {value: 'ABSENT', label: 'Change to Absent', color: 'danger'},
+            {value: 'PRESENT', label: 'Change to Present', color: 'success'}
+        ]
+    };
+    
+    const options = statusOptions[currentStatus] || [];
+    
+    if (options.length === 0) {
+        alert('No status change options available for this student.');
+        return;
+    }
+    
+    // Create modal HTML
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Status</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Current status: <span class="badge bg-secondary">${currentStatus.replace('_', ' ')}</span></p>
+                    <p>Change to:</p>
+                    ${options.map(option => `
+                        <button class="btn btn-outline-${option.color} btn-sm w-100 mb-2" 
+                                onclick="changeStudentStatus('${studentId}', '${option.value}', this)">
+                            ${option.label}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    modal.addEventListener('hidden.bs.modal', function() {
+        document.body.removeChild(modal);
+    });
+}
+
+function changeStudentStatus(studentId, newStatus, buttonElement) {
+    // For now, just show an alert - we'll implement the actual AJAX call later
+    alert(`Status change functionality will be implemented in the next update.\n\nStudent ID: ${studentId}\nNew Status: ${newStatus}`);
+    
+    // Close the modal
+    const modal = buttonElement.closest('.modal');
+    const bootstrapModal = bootstrap.Modal.getInstance(modal);
+    bootstrapModal.hide();
 }
 
 // Chart.js configurations

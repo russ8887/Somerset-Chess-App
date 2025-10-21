@@ -9,6 +9,17 @@ from django.contrib import messages
 from django.db.models import Exists, OuterRef, Count, Q, F, Avg, Max, Min, Case, When, Value, FloatField
 from django.db import transaction
 from datetime import date, timedelta
+from functools import wraps
+
+def head_coach_required(view_func):
+    """Decorator to restrict access to head coaches and staff only"""
+    @wraps(view_func)
+    @login_required
+    def _wrapped_view(request, *args, **kwargs):
+        if not (hasattr(request.user, 'coach') and request.user.coach.is_head_coach) and not request.user.is_staff:
+            return redirect('dashboard')
+        return view_func(request, *args, **kwargs)
+    return _wrapped_view
 
 from .models import (
     AttendanceRecord, Coach, Enrollment, LessonNote, LessonSession,
@@ -1030,6 +1041,15 @@ def analytics_dashboard(request):
             scheduledgroup__term=current_term
         ).distinct().order_by('user__first_name')
         
+        # Get all students overview with sorting
+        sort_by = request.GET.get('sort', 'lessons_owed')  # Default sort by lessons owed
+        sort_order = request.GET.get('order', 'desc')  # desc = most owed first
+        
+        try:
+            all_students_overview = _get_all_students_overview(current_term, sort_by, sort_order)
+        except Exception as e:
+            all_students_overview = []
+        
         context = {
             'current_term': current_term,
             'start_date': start_date,
@@ -1042,6 +1062,9 @@ def analytics_dashboard(request):
             'filtered_students': filtered_students,
             'filtered_student_count': filtered_student_count,
             'active_filters': filters,
+            'all_students_overview': all_students_overview,
+            'sort_by': sort_by,
+            'sort_order': sort_order,
         }
         
         return render(request, 'scheduler/analytics_dashboard.html', context)
@@ -1434,6 +1457,135 @@ def _get_attendance_analytics(term, start_date, end_date):
             ).count() / total_records.count() * 100) if total_records.count() > 0 else 0, 1
         )
     }
+
+def _get_all_students_overview(term, sort_by='lessons_owed', sort_order='desc'):
+    """Get comprehensive overview of all students with sorting options"""
+    
+    # Get all enrollments for the term with related data
+    enrollments = Enrollment.objects.filter(
+        term=term, 
+        is_active=True
+    ).select_related(
+        'student__school_class'
+    ).prefetch_related(
+        'student__enrollment_set__scheduledgroup_set__coach__user'
+    ).annotate(
+        attended_lessons=Count('attendancerecord', filter=Q(
+            attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+        )),
+        total_lessons=Count('attendancerecord'),
+        absent_lessons=Count('attendancerecord', filter=Q(
+            attendancerecord__status='ABSENT'
+        )),
+        sick_present_lessons=Count('attendancerecord', filter=Q(
+            attendancerecord__status='SICK_PRESENT'
+        ))
+    )
+    
+    # Process each enrollment and add calculated fields
+    students_overview = []
+    
+    for enrollment in enrollments:
+        student = enrollment.student
+        lesson_balance = enrollment.get_lesson_balance()
+        
+        # Get current coach and group info
+        current_groups = enrollment.scheduledgroup_set.filter(term=term)
+        coach_names = []
+        group_types = set()
+        group_names = []
+        
+        for group in current_groups:
+            if group.coach:
+                coach_name = f"{group.coach.user.first_name} {group.coach.user.last_name}"
+                if coach_name not in coach_names:
+                    coach_names.append(coach_name)
+            group_types.add(group.get_group_type_display())
+            group_names.append(group.name)
+        
+        # Get most recent attendance record for last status
+        latest_record = AttendanceRecord.objects.filter(
+            enrollment=enrollment
+        ).select_related('lesson_session').order_by('-lesson_session__lesson_date').first()
+        
+        # Calculate days since last lesson
+        days_since_last = None
+        last_lesson_date = None
+        last_status = 'No lessons yet'
+        
+        if latest_record:
+            last_lesson_date = latest_record.lesson_session.lesson_date
+            days_since_last = (date.today() - last_lesson_date).days
+            last_status = latest_record.get_status_display()
+        
+        # Determine balance category and color
+        if lesson_balance >= 3:
+            balance_category = 'Very Behind'
+            balance_color = 'danger'
+        elif lesson_balance > 0:
+            balance_category = 'Behind'
+            balance_color = 'warning'
+        elif lesson_balance < -2:
+            balance_category = 'Ahead'
+            balance_color = 'info'
+        else:
+            balance_category = 'On Track'
+            balance_color = 'success'
+        
+        student_data = {
+            'student': student,
+            'enrollment': enrollment,
+            'student_name': f"{student.first_name} {student.last_name}",
+            'lessons_owed': lesson_balance,
+            'balance_category': balance_category,
+            'balance_color': balance_color,
+            'attended_lessons': enrollment.attended_lessons,
+            'target_lessons': enrollment.adjusted_target,
+            'total_lessons': enrollment.total_lessons,
+            'absent_lessons': enrollment.absent_lessons,
+            'sick_present_lessons': enrollment.sick_present_lessons,
+            'skill_level': student.get_skill_level_display(),
+            'year_level': student.year_level,
+            'school_class': student.school_class.name if student.school_class else 'N/A',
+            'enrollment_type': enrollment.get_enrollment_type_display(),
+            'coaches': ', '.join(coach_names) if coach_names else 'No Coach',
+            'group_types': ', '.join(group_types) if group_types else 'No Groups',
+            'group_names': ', '.join(group_names) if group_names else 'No Groups',
+            'last_lesson_date': last_lesson_date,
+            'days_since_last': days_since_last,
+            'last_status': last_status,
+            'attendance_rate': round((enrollment.attended_lessons / enrollment.total_lessons * 100) if enrollment.total_lessons > 0 else 0, 1)
+        }
+        
+        students_overview.append(student_data)
+    
+    # Apply sorting
+    reverse_sort = sort_order == 'desc'
+    
+    if sort_by == 'lessons_owed':
+        students_overview.sort(key=lambda x: x['lessons_owed'], reverse=reverse_sort)
+    elif sort_by == 'student_name':
+        students_overview.sort(key=lambda x: x['student_name'], reverse=reverse_sort)
+    elif sort_by == 'coach':
+        students_overview.sort(key=lambda x: x['coaches'], reverse=reverse_sort)
+    elif sort_by == 'group_type':
+        students_overview.sort(key=lambda x: x['group_types'], reverse=reverse_sort)
+    elif sort_by == 'skill_level':
+        students_overview.sort(key=lambda x: x['skill_level'], reverse=reverse_sort)
+    elif sort_by == 'school_class':
+        students_overview.sort(key=lambda x: x['school_class'], reverse=reverse_sort)
+    elif sort_by == 'attendance_rate':
+        students_overview.sort(key=lambda x: x['attendance_rate'], reverse=reverse_sort)
+    elif sort_by == 'days_since_last':
+        students_overview.sort(key=lambda x: x['days_since_last'] or 9999, reverse=reverse_sort)
+    elif sort_by == 'last_status':
+        students_overview.sort(key=lambda x: x['last_status'], reverse=reverse_sort)
+    else:
+        # Default: sort by lessons owed (most behind first)
+        students_overview.sort(key=lambda x: x['lessons_owed'], reverse=True)
+    
+    return students_overview
+
 
 @login_required
 def add_extra_lesson(request):
