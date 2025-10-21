@@ -371,7 +371,7 @@
                                 <th class="sortable" data-sort="student_name">
                                     Student Name 
                                     {% if sort_by == 'student_name' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -379,7 +379,7 @@
                                 <th class="sortable" data-sort="lessons_owed">
                                     Lessons Owed 
                                     {% if sort_by == 'lessons_owed' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -388,7 +388,7 @@
                                 <th class="sortable" data-sort="attendance_rate">
                                     Attendance Rate
                                     {% if sort_by == 'attendance_rate' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -396,7 +396,7 @@
                                 <th class="sortable" data-sort="coach">
                                     Coach
                                     {% if sort_by == 'coach' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -404,7 +404,7 @@
                                 <th class="sortable" data-sort="group_type">
                                     Group Type
                                     {% if sort_by == 'group_type' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -412,7 +412,7 @@
                                 <th class="sortable" data-sort="school_class">
                                     Class
                                     {% if sort_by == 'school_class' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -420,7 +420,7 @@
                                 <th class="sortable" data-sort="skill_level">
                                     Skill Level
                                     {% if sort_by == 'skill_level' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -428,7 +428,7 @@
                                 <th class="sortable" data-sort="last_status">
                                     Last Status
                                     {% if sort_by == 'last_status' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
@@ -436,7 +436,7 @@
                                 <th class="sortable" data-sort="days_since_last">
                                     Days Since Last
                                     {% if sort_by == 'days_since_last' %}
-                                        <i class="fas fa-sort-{{ sort_order == 'asc'|yesno:'up,down' }}"></i>
+                                        <i class="fas fa-sort-{% if sort_order == 'asc' %}up{% else %}down{% endif %}"></i>
                                     {% else %}
                                         <i class="fas fa-sort text-muted"></i>
                                     {% endif %}
