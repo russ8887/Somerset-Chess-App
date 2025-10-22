@@ -1,11 +1,12 @@
 from django.urls import path
 from django.contrib.auth.views import LogoutView
+from django.urls import reverse_lazy
 from . import views, event_views
 
 urlpatterns = [
     # Main pages
     path('login/', views.CoachLoginView.as_view(), name='login'),
-    path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
+    path('logout/', LogoutView.as_view(next_page=reverse_lazy('login')), name='logout'),
     path('', views.DashboardView.as_view(), name='dashboard'),
     path('student-report/<int:student_pk>/term/<int:term_pk>/', views.student_report_view, name='student-report'),
     path('availability/', views.manage_availability, name='manage-availability'),
