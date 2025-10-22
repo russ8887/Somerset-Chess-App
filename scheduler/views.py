@@ -171,7 +171,7 @@ class DashboardView(LoginRequiredMixin, ListView):
                 for school_class in event.school_classes.all():
                     affected_students.update(school_class.student_set.all())
 
-                # Mark affected students as absent in affected lessons
+                # Mark affected students as absent in affected lessons (ONLY if no manual override exists)
                 for lesson in affected_lessons:
                     for student in affected_students:
                         # Find enrollment for this student in the lesson's term
@@ -182,7 +182,6 @@ class DashboardView(LoginRequiredMixin, ListView):
                             )
                             # Check if student is in this lesson
                             if enrollment in lesson.scheduled_group.members.all():
-                                # Mark as absent with the specific event reason
                                 # Map event types to appropriate absence reasons
                                 reason_mapping = {
                                     'PUBLIC_HOLIDAY': 'CLASS_EVENT',
@@ -195,23 +194,40 @@ class DashboardView(LoginRequiredMixin, ListView):
                                 
                                 absence_reason = reason_mapping.get(event.event_type, 'CLASS_EVENT')
                                 
-                                attendance_record, created = AttendanceRecord.objects.update_or_create(
+                                # FIXED: Only create absence record if no record exists (respect manual overrides)
+                                existing_record = AttendanceRecord.objects.filter(
                                     lesson_session=lesson,
-                                    enrollment=enrollment,
-                                    defaults={
-                                        'status': 'ABSENT',
-                                        'reason_for_absence': absence_reason
-                                    }
-                                )
+                                    enrollment=enrollment
+                                ).first()
                                 
-                                # Create a lesson note with the specific event reason for better tracking
-                                if created or not hasattr(attendance_record, 'lessonnote'):
-                                    LessonNote.objects.update_or_create(
-                                        attendance_record=attendance_record,
-                                        defaults={
-                                            'coach_comments': f"Absent due to: {event.reason} ({event.name})"
-                                        }
+                                if not existing_record:
+                                    # No record exists - create new absent record due to event
+                                    attendance_record = AttendanceRecord.objects.create(
+                                        lesson_session=lesson,
+                                        enrollment=enrollment,
+                                        status='ABSENT',
+                                        reason_for_absence=absence_reason
                                     )
+                                    
+                                    # Create a lesson note with the specific event reason for better tracking
+                                    LessonNote.objects.create(
+                                        attendance_record=attendance_record,
+                                        coach_comments=f"Absent due to: {event.reason} ({event.name})"
+                                    )
+                                elif existing_record.status == 'PENDING':
+                                    # Record exists but is still PENDING - update it to absent due to event
+                                    existing_record.status = 'ABSENT'
+                                    existing_record.reason_for_absence = absence_reason
+                                    existing_record.save()
+                                    
+                                    # Add note if none exists
+                                    if not hasattr(existing_record, 'lessonnote'):
+                                        LessonNote.objects.create(
+                                            attendance_record=existing_record,
+                                            coach_comments=f"Absent due to: {event.reason} ({event.name})"
+                                        )
+                                # If record exists with PRESENT, ABSENT, etc., leave it unchanged (manual override)
+                                
                         except Enrollment.DoesNotExist:
                             continue  # Student not enrolled in this term
 
@@ -496,7 +512,27 @@ def manage_lesson_view(request, lesson_pk):
     unavailable_student_ids = ScheduledUnavailability.objects.filter(day_of_week=lesson_day, time_slot=lesson_timeslot).values_list('students__id', flat=True)
     unavailable_class_student_ids = Student.objects.filter(school_class__scheduledunavailability__day_of_week=lesson_day, school_class__scheduledunavailability__time_slot=lesson_timeslot).values_list('id', flat=True)
     
-    non_suggested_ids = set(list(busy_student_ids) + list(unavailable_student_ids) + list(unavailable_class_student_ids))
+    # FIXED: Also exclude students blocked by OneOffEvents on this specific date
+    event_blocked_student_ids = []
+    one_off_events = OneOffEvent.objects.filter(event_date=lesson.lesson_date)
+    
+    for event in one_off_events:
+        # Check if event affects this time slot (or all time slots if none specified)
+        event_affects_timeslot = False
+        if event.time_slots.exists():
+            event_affects_timeslot = event.time_slots.filter(id=lesson_timeslot.id).exists()
+        else:
+            event_affects_timeslot = True  # Event affects all time slots
+        
+        if event_affects_timeslot:
+            # Get students directly affected by this event
+            event_blocked_student_ids.extend(event.students.values_list('id', flat=True))
+            
+            # Get students affected by class-based events
+            for school_class in event.school_classes.all():
+                event_blocked_student_ids.extend(school_class.student_set.values_list('id', flat=True))
+    
+    non_suggested_ids = set(list(busy_student_ids) + list(unavailable_student_ids) + list(unavailable_class_student_ids) + list(event_blocked_student_ids))
 
     # 4. Process each candidate and add calculated fields
     candidates_list = []
