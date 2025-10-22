@@ -12,8 +12,9 @@ from .event_forms import (
     PublicHolidayForm, PupilFreeDayForm, CampEventForm, 
     ExcursionEventForm, IndividualStudentEventForm, CustomEventForm
 )
+from .views import head_coach_required  # Import the head_coach_required decorator
 
-@login_required
+@head_coach_required
 def event_management_dashboard(request):
     """Main dashboard for event management"""
     
@@ -49,7 +50,7 @@ def event_management_dashboard(request):
     
     return render(request, 'scheduler/event_management_dashboard.html', context)
 
-@login_required
+@head_coach_required
 def create_public_holiday(request):
     """Create a public holiday event"""
     
@@ -85,7 +86,7 @@ def create_public_holiday(request):
     
     return render(request, 'scheduler/create_event.html', context)
 
-@login_required
+@head_coach_required
 def create_pupil_free_day(request):
     """Create a pupil free day event"""
     
@@ -121,7 +122,7 @@ def create_pupil_free_day(request):
     
     return render(request, 'scheduler/create_event.html', context)
 
-@login_required
+@head_coach_required
 def create_camp_event(request):
     """Create a multi-day camp event"""
     
@@ -158,7 +159,7 @@ def create_camp_event(request):
     
     return render(request, 'scheduler/create_camp_event.html', context)
 
-@login_required
+@head_coach_required
 def create_excursion_event(request):
     """Create a class excursion event"""
     
@@ -196,7 +197,7 @@ def create_excursion_event(request):
     
     return render(request, 'scheduler/create_excursion_event.html', context)
 
-@login_required
+@head_coach_required
 def create_individual_event(request):
     """Create an event for individual students"""
     
@@ -234,7 +235,7 @@ def create_individual_event(request):
     
     return render(request, 'scheduler/create_individual_event.html', context)
 
-@login_required
+@head_coach_required
 def create_custom_event(request):
     """Create a fully custom event"""
     
@@ -270,7 +271,7 @@ def create_custom_event(request):
     
     return render(request, 'scheduler/create_custom_event.html', context)
 
-@login_required
+@head_coach_required
 def event_preview(request):
     """Preview an event before creating it"""
     

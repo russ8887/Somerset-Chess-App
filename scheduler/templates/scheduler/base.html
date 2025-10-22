@@ -436,14 +436,19 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'manage-availability' %}">Availability</a>
                     </li>
-                    {% if user.is_authenticated and user.coach.is_head_coach or user.is_staff %}
+                    {% if user.is_authenticated and user.coach and user.coach.is_head_coach %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'analytics-dashboard' %}">
                             <i class="bi bi-graph-up me-1"></i>Analytics
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'event-management-dashboard' %}">
+                            <i class="bi bi-calendar-event me-1"></i>Event Management
+                        </a>
+                    </li>
                     {% endif %}
-                    {% if user.is_staff %}
+                    {% if user.is_staff or user.is_authenticated and user.coach and user.coach.is_head_coach %}
                     <li class="nav-item">
                         <a class="nav-link" href="/admin/">
                             <i class="bi bi-gear-fill me-1"></i>Admin Panel
