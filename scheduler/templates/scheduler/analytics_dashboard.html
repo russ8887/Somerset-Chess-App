@@ -174,9 +174,141 @@
                         </div>
                     </div>
 
-                    <!-- Lesson Balance and Student Status Filters -->
+                    <!-- Student Demographics Filters -->
                     <div class="row mb-3">
-                        <div class="col-md-4">
+                        <div class="col-md-12">
+                            <h6 class="text-muted mb-2"><i class="fas fa-users"></i> Student Demographics</h6>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Year Level</label>
+                            <div class="form-check-container" style="max-height: 120px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.5rem;">
+                                {% for year in available_year_levels %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="year_level_filter" value="{{ year }}" id="year_{{ year }}"
+                                           {% if year|stringformat:"s" in request.GET.year_level_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="year_{{ year }}">Year {{ year }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">School Class</label>
+                            <div class="form-check-container" style="max-height: 120px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.5rem;">
+                                {% for class in available_school_classes %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="school_class_filter" value="{{ class.id }}" id="class_{{ class.id }}"
+                                           {% if class.id|stringformat:"s" in request.GET.school_class_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="class_{{ class.id }}">{{ class.name }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Skill Level</label>
+                            <div class="form-check-container" style="border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.5rem;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="skill_level_filter" value="B" id="skill_beginner"
+                                           {% if 'B' in request.GET.skill_level_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="skill_beginner">
+                                        <span class="badge bg-primary">Beginner</span>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="skill_level_filter" value="I" id="skill_intermediate"
+                                           {% if 'I' in request.GET.skill_level_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="skill_intermediate">
+                                        <span class="badge bg-warning text-dark">Intermediate</span>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="skill_level_filter" value="A" id="skill_advanced"
+                                           {% if 'A' in request.GET.skill_level_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="skill_advanced">
+                                        <span class="badge bg-success">Advanced</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Enrollment Type</label>
+                            <div class="form-check-container" style="border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.5rem;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="enrollment_type_filter" value="SOLO" id="enrollment_solo"
+                                           {% if 'SOLO' in request.GET.enrollment_type_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="enrollment_solo">
+                                        <i class="fas fa-user me-1"></i>Solo
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="enrollment_type_filter" value="PAIR" id="enrollment_pair"
+                                           {% if 'PAIR' in request.GET.enrollment_type_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="enrollment_pair">
+                                        <i class="fas fa-users me-1"></i>Pair
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="enrollment_type_filter" value="GROUP" id="enrollment_group"
+                                           {% if 'GROUP' in request.GET.enrollment_type_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="enrollment_group">
+                                        <i class="fas fa-users me-1"></i>Group
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scheduling & Lesson Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <h6 class="text-muted mb-2"><i class="fas fa-calendar-alt"></i> Scheduling & Progress</h6>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Day of Week</label>
+                            <div class="form-check-container" style="border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.5rem;">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="day_filter" value="0" id="day_monday"
+                                           {% if '0' in request.GET.day_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="day_monday">Monday</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="day_filter" value="1" id="day_tuesday"
+                                           {% if '1' in request.GET.day_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="day_tuesday">Tuesday</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="day_filter" value="2" id="day_wednesday"
+                                           {% if '2' in request.GET.day_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="day_wednesday">Wednesday</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="day_filter" value="3" id="day_thursday"
+                                           {% if '3' in request.GET.day_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="day_thursday">Thursday</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="day_filter" value="4" id="day_friday"
+                                           {% if '4' in request.GET.day_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="day_friday">Friday</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Time Slot</label>
+                            <div class="form-check-container" style="max-height: 120px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 0.5rem;">
+                                {% for time_slot in available_time_slots %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="time_slot_filter" value="{{ time_slot.id }}" id="time_{{ time_slot.id }}"
+                                           {% if time_slot.id|stringformat:"s" in request.GET.time_slot_filter %}checked{% endif %}>
+                                    <label class="form-check-label" for="time_{{ time_slot.id }}">{{ time_slot }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-md-3">
                             <label for="lesson_balance_filter" class="form-label">Lesson Balance</label>
                             <select class="form-select" name="lesson_balance_filter" id="lesson_balance_filter">
                                 <option value="">All Students</option>
@@ -186,6 +318,25 @@
                                 <option value="ahead" {% if request.GET.lesson_balance_filter == 'ahead' %}selected{% endif %}>Ahead (Has Credit)</option>
                             </select>
                         </div>
+                        <div class="col-md-3">
+                            <label for="attendance_rate_filter" class="form-label">Attendance Rate</label>
+                            <select class="form-select" name="attendance_rate_filter" id="attendance_rate_filter">
+                                <option value="">All Rates</option>
+                                <option value="high" {% if request.GET.attendance_rate_filter == 'high' %}selected{% endif %}>90%+ (Excellent)</option>
+                                <option value="good" {% if request.GET.attendance_rate_filter == 'good' %}selected{% endif %}>75-89% (Good)</option>
+                                <option value="average" {% if request.GET.attendance_rate_filter == 'average' %}selected{% endif %}>50-74% (Average)</option>
+                                <option value="low" {% if request.GET.attendance_rate_filter == 'low' %}selected{% endif %}>Below 50% (Poor)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Administrative Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <h6 class="text-muted mb-2"><i class="fas fa-cog"></i> Administrative</h6>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
                         <div class="col-md-4">
                             <label for="student_status_filter" class="form-label">Student Status</label>
                             <select class="form-select" name="student_status_filter" id="student_status_filter">
@@ -203,6 +354,16 @@
                                     {{ coach.user.first_name }} {{ coach.user.last_name }}
                                 </option>
                                 {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="days_since_last_filter" class="form-label">Days Since Last Lesson</label>
+                            <select class="form-select" name="days_since_last_filter" id="days_since_last_filter">
+                                <option value="">Any Time</option>
+                                <option value="recent" {% if request.GET.days_since_last_filter == 'recent' %}selected{% endif %}>0-7 days (Recent)</option>
+                                <option value="moderate" {% if request.GET.days_since_last_filter == 'moderate' %}selected{% endif %}>8-14 days (Moderate)</option>
+                                <option value="overdue" {% if request.GET.days_since_last_filter == 'overdue' %}selected{% endif %}>15+ days (Overdue)</option>
+                                <option value="never" {% if request.GET.days_since_last_filter == 'never' %}selected{% endif %}>Never attended</option>
                             </select>
                         </div>
                     </div>

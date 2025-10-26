@@ -1015,13 +1015,21 @@ def analytics_dashboard(request):
         else:
             end_date = current_term.end_date
         
-        # Get filter parameters
+        # Get filter parameters - including new ones
         filters = {
             'status_filter': request.GET.getlist('status_filter'),
             'absence_reason_filter': request.GET.getlist('absence_reason_filter'),
             'lesson_balance_filter': request.GET.get('lesson_balance_filter'),
             'student_status_filter': request.GET.get('student_status_filter'),
             'coach_filter': request.GET.get('coach_filter'),
+            'year_level_filter': request.GET.getlist('year_level_filter'),
+            'school_class_filter': request.GET.getlist('school_class_filter'),
+            'skill_level_filter': request.GET.getlist('skill_level_filter'),
+            'enrollment_type_filter': request.GET.getlist('enrollment_type_filter'),
+            'day_filter': request.GET.getlist('day_filter'),
+            'time_slot_filter': request.GET.getlist('time_slot_filter'),
+            'attendance_rate_filter': request.GET.get('attendance_rate_filter'),
+            'days_since_last_filter': request.GET.get('days_since_last_filter'),
         }
         
         # Handle export request
@@ -1077,6 +1085,17 @@ def analytics_dashboard(request):
             scheduledgroup__term=current_term
         ).distinct().order_by('user__first_name')
         
+        # Get available options for new filters
+        available_year_levels = Student.objects.filter(
+            enrollment__term=current_term
+        ).values_list('year_level', flat=True).distinct().order_by('year_level')
+        
+        available_school_classes = SchoolClass.objects.filter(
+            student__enrollment__term=current_term
+        ).distinct().order_by('name')
+        
+        available_time_slots = TimeSlot.objects.all().order_by('start_time')
+        
         # Get all students overview with sorting
         sort_by = request.GET.get('sort', 'lessons_owed')  # Default sort by lessons owed
         sort_order = request.GET.get('order', 'desc')  # desc = most owed first
@@ -1095,6 +1114,9 @@ def analytics_dashboard(request):
             'utilization_analytics': utilization_analytics,
             'attendance_analytics': attendance_analytics,
             'available_coaches': available_coaches,
+            'available_year_levels': available_year_levels,
+            'available_school_classes': available_school_classes,
+            'available_time_slots': available_time_slots,
             'filtered_students': filtered_students,
             'filtered_student_count': filtered_student_count,
             'active_filters': filters,
@@ -1113,13 +1135,13 @@ def analytics_dashboard(request):
 
 
 def _get_filtered_students(term, start_date, end_date, filters):
-    """Get filtered list of students based on filter criteria"""
+    """Get filtered list of students based on filter criteria - Enhanced with new filters"""
     
     # Start with base query
     base_query = AttendanceRecord.objects.filter(
         enrollment__term=term,
         lesson_session__lesson_date__range=[start_date, end_date]
-    ).select_related('enrollment__student', 'lesson_session__scheduled_group')
+    ).select_related('enrollment__student__school_class', 'lesson_session__scheduled_group__coach__user', 'lesson_session__scheduled_group__time_slot')
     
     # Apply status filters
     if filters.get('status_filter'):
@@ -1139,6 +1161,34 @@ def _get_filtered_students(term, start_date, end_date, filters):
             base_query = base_query.filter(enrollment__is_active=True)
         elif filters['student_status_filter'] == 'inactive':
             base_query = base_query.filter(enrollment__is_active=False)
+    
+    # Apply NEW demographic filters
+    if filters.get('year_level_filter'):
+        year_levels = [int(y) for y in filters['year_level_filter'] if y.isdigit()]
+        if year_levels:
+            base_query = base_query.filter(enrollment__student__year_level__in=year_levels)
+    
+    if filters.get('school_class_filter'):
+        class_ids = [int(c) for c in filters['school_class_filter'] if c.isdigit()]
+        if class_ids:
+            base_query = base_query.filter(enrollment__student__school_class_id__in=class_ids)
+    
+    if filters.get('skill_level_filter'):
+        base_query = base_query.filter(enrollment__student__skill_level__in=filters['skill_level_filter'])
+    
+    if filters.get('enrollment_type_filter'):
+        base_query = base_query.filter(enrollment__enrollment_type__in=filters['enrollment_type_filter'])
+    
+    # Apply NEW scheduling filters
+    if filters.get('day_filter'):
+        days = [int(d) for d in filters['day_filter'] if d.isdigit()]
+        if days:
+            base_query = base_query.filter(lesson_session__scheduled_group__day_of_week__in=days)
+    
+    if filters.get('time_slot_filter'):
+        time_slot_ids = [int(t) for t in filters['time_slot_filter'] if t.isdigit()]
+        if time_slot_ids:
+            base_query = base_query.filter(lesson_session__scheduled_group__time_slot_id__in=time_slot_ids)
     
     # Get unique students from filtered records
     student_records = []
@@ -1161,6 +1211,48 @@ def _get_filtered_students(term, start_date, end_date, filters):
                     continue
                 elif filters['lesson_balance_filter'] == 'ahead' and balance >= 0:
                     continue
+            
+            # Apply attendance rate filter if specified
+            if filters.get('attendance_rate_filter'):
+                # Calculate attendance rate
+                total_lessons = record.enrollment.attendancerecord_set.count()
+                attended_lessons = record.enrollment.attendancerecord_set.filter(
+                    status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+                ).count()
+                
+                attendance_rate = (attended_lessons / total_lessons * 100) if total_lessons > 0 else 0
+                
+                if filters['attendance_rate_filter'] == 'high' and attendance_rate < 90:
+                    continue
+                elif filters['attendance_rate_filter'] == 'good' and not (75 <= attendance_rate < 90):
+                    continue
+                elif filters['attendance_rate_filter'] == 'average' and not (50 <= attendance_rate < 75):
+                    continue
+                elif filters['attendance_rate_filter'] == 'low' and attendance_rate >= 50:
+                    continue
+            
+            # Apply days since last lesson filter if specified
+            if filters.get('days_since_last_filter'):
+                # Get most recent attendance record for this enrollment
+                latest_record = AttendanceRecord.objects.filter(
+                    enrollment=record.enrollment
+                ).select_related('lesson_session').order_by('-lesson_session__lesson_date').first()
+                
+                if latest_record:
+                    days_since_last = (date.today() - latest_record.lesson_session.lesson_date).days
+                    
+                    if filters['days_since_last_filter'] == 'recent' and days_since_last > 7:
+                        continue
+                    elif filters['days_since_last_filter'] == 'moderate' and not (8 <= days_since_last <= 14):
+                        continue
+                    elif filters['days_since_last_filter'] == 'overdue' and days_since_last < 15:
+                        continue
+                    elif filters['days_since_last_filter'] == 'never' and latest_record:
+                        continue
+                else:
+                    # No lessons yet - only include if filter is 'never'
+                    if filters['days_since_last_filter'] != 'never':
+                        continue
             
             student_records.append({
                 'student': record.enrollment.student,
