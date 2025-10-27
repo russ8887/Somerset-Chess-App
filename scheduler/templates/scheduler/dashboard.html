@@ -205,7 +205,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.fetch = function(...args) {
         return originalFetch.apply(this, args).then(response => {
             // Check if this was a move API call
-            if (args[0] && args[0].includes('/api/execute-slot-move/')) {
+            if (args[0] && args[0].includes('/api/move-student/')) {
                 response.clone().json().then(data => {
                     if (data.success) {
                         console.log('Move API success detected, triggering refresh...');
