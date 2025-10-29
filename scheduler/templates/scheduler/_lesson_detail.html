@@ -109,6 +109,11 @@
                         </button>
                     {% endif %}
 
+                    {# --- Chess Training Button --- #}
+                    <a href="{% url 'student_training' record.pk %}" class="btn btn-sm btn-primary" title="Chess Training for {{ record.enrollment.student.first_name }}">
+                        <i class="bi bi-mortarboard me-1"></i>Training
+                    </a>
+
                     {# --- Notes Button Logic --- #}
                     {% with lesson_note=record.lessonnote|default:None %}
                         {% if lesson_note %}
