@@ -506,7 +506,19 @@ def manage_lesson_view(request, lesson_pk):
         )
 
     # 3. Determine which of them are "suggested" (available and not busy)
+    # Get students with attendance records on this date
     busy_student_ids = AttendanceRecord.objects.filter(lesson_session__lesson_date=lesson.lesson_date).values_list('enrollment__student_id', flat=True)
+    
+    # FIXED: Also exclude students who are members of groups with lessons on this date
+    # This prevents double-booking when using extra lessons and "Find Slots" feature
+    group_member_student_ids = Student.objects.filter(
+        enrollment__scheduledgroup__lessonsession__lesson_date=lesson.lesson_date,
+        enrollment__term=term
+    ).values_list('id', flat=True)
+    
+    # Combine both types of busy students
+    all_busy_student_ids = set(list(busy_student_ids) + list(group_member_student_ids))
+    
     lesson_day = lesson.lesson_date.weekday()
     lesson_timeslot = lesson.scheduled_group.time_slot
     unavailable_student_ids = ScheduledUnavailability.objects.filter(day_of_week=lesson_day, time_slot=lesson_timeslot).values_list('students__id', flat=True)
@@ -532,7 +544,7 @@ def manage_lesson_view(request, lesson_pk):
             for school_class in event.school_classes.all():
                 event_blocked_student_ids.extend(school_class.student_set.values_list('id', flat=True))
     
-    non_suggested_ids = set(list(busy_student_ids) + list(unavailable_student_ids) + list(unavailable_class_student_ids) + list(event_blocked_student_ids))
+    non_suggested_ids = set(list(all_busy_student_ids) + list(unavailable_student_ids) + list(unavailable_class_student_ids) + list(event_blocked_student_ids))
 
     # 4. Process each candidate and add calculated fields
     candidates_list = []
