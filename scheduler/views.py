@@ -2307,3 +2307,170 @@ def _get_student_progress_summary(student):
         'total_topics_available': sum(lp['total'] for lp in level_progress.values()),
         'total_mastered': status_summary.get(StudentProgress.Status.MASTERED, 0)
     }
+
+
+@login_required
+@require_POST
+def bulk_advance_student(request, record_pk):
+    """Bulk advance student through curriculum levels - Quick Level Advancement"""
+    import logging
+    from django.contrib import messages
+    from datetime import date
+    from .models import StudentProgress, CurriculumLevel, CurriculumTopic, RecapSchedule
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"🚀 BULK ADVANCE: Starting bulk advancement for record {record_pk}")
+    
+    record = get_object_or_404(AttendanceRecord, pk=record_pk)
+    student = record.enrollment.student
+    lesson = record.lesson_session
+    
+    advancement_type = request.POST.get('advancement_type')
+    reason = request.POST.get('reason', 'Bulk advancement by coach').strip()
+    
+    logger.info(f"🚀 Student: {student.first_name} {student.last_name}")
+    logger.info(f"🚀 Advancement type: {advancement_type}")
+    logger.info(f"🚀 Reason: {reason}")
+    
+    if not advancement_type:
+        messages.error(request, "Please select an advancement type.")
+        return redirect('student_training', record_pk=record_pk)
+    
+    try:
+        with transaction.atomic():
+            topics_to_advance = []
+            levels_advanced = []
+            total_elo_awarded = 0
+            
+            # Parse advancement type and get topics
+            if advancement_type == 'foundation':
+                # Complete Foundation Level (400-600 ELO)
+                foundation_level = CurriculumLevel.objects.get(name='FOUNDATION')
+                topics_to_advance = foundation_level.topics.filter(is_active=True)
+                levels_advanced = ['Foundation']
+                
+            elif advancement_type == 'tactical':
+                # Complete Tactical Level (600-800 ELO)
+                tactical_level = CurriculumLevel.objects.get(name='TACTICAL')
+                topics_to_advance = tactical_level.topics.filter(is_active=True)
+                levels_advanced = ['Tactical Awareness']
+                
+            elif advancement_type == 'to_strategic':
+                # Skip to Strategic Level (complete Foundation + Tactical)
+                foundation = CurriculumLevel.objects.get(name='FOUNDATION')
+                tactical = CurriculumLevel.objects.get(name='TACTICAL')
+                foundation_topics = foundation.topics.filter(is_active=True)
+                tactical_topics = tactical.topics.filter(is_active=True)
+                topics_to_advance = list(foundation_topics) + list(tactical_topics)
+                levels_advanced = ['Foundation', 'Tactical Awareness']
+                
+            elif advancement_type == 'to_advanced':
+                # Skip to Advanced Level (complete Foundation + Tactical + Strategic)
+                foundation = CurriculumLevel.objects.get(name='FOUNDATION')
+                tactical = CurriculumLevel.objects.get(name='TACTICAL')
+                strategic = CurriculumLevel.objects.get(name='STRATEGIC')
+                topics_to_advance = (
+                    list(foundation.topics.filter(is_active=True)) +
+                    list(tactical.topics.filter(is_active=True)) +
+                    list(strategic.topics.filter(is_active=True))
+                )
+                levels_advanced = ['Foundation', 'Tactical Awareness', 'Strategic Thinking']
+                
+            elif advancement_type.startswith('custom_elo_'):
+                # Custom ELO advancement (e.g., custom_elo_800)
+                target_elo = int(advancement_type.split('_')[-1])
+                current_elo = _calculate_student_level_and_elo(student)[1]
+                
+                if target_elo <= current_elo:
+                    messages.warning(request, f"Student already has {current_elo} ELO (target: {target_elo})")
+                    return redirect('student_training', record_pk=record_pk)
+                
+                # Find all topics up to the target ELO
+                topics_to_advance = []
+                for level in CurriculumLevel.objects.filter(min_elo__lt=target_elo).order_by('sort_order'):
+                    topics_to_advance.extend(level.topics.filter(is_active=True))
+                    levels_advanced.append(level.get_name_display())
+                
+            else:
+                messages.error(request, f"Invalid advancement type: {advancement_type}")
+                return redirect('student_training', record_pk=record_pk)
+            
+            # Bulk create/update progress records
+            logger.info(f"📚 Processing {len(topics_to_advance)} topics for advancement")
+            
+            topics_completed = 0
+            topics_skipped = 0
+            
+            for topic in topics_to_advance:
+                # Check if student already has progress on this topic
+                progress, created = StudentProgress.objects.get_or_create(
+                    student=student,
+                    topic=topic,
+                    defaults={
+                        'status': StudentProgress.Status.MASTERED,
+                        'mastery_date': date.today(),
+                        'last_lesson_session': lesson,
+                        'attempts': 1,
+                        'pass_percentage': 100,
+                        'coach_notes': f'[{date.today()}] Bulk advanced: {reason}'
+                    }
+                )
+                
+                if created or progress.status != StudentProgress.Status.MASTERED:
+                    # Mark as mastered (skip if already mastered)
+                    if not created:
+                        progress.status = StudentProgress.Status.MASTERED
+                        progress.mastery_date = date.today()
+                        progress.last_lesson_session = lesson
+                        progress.pass_percentage = 100
+                        if progress.coach_notes:
+                            progress.coach_notes += f"\n[{date.today()}] Bulk advanced: {reason}"
+                        else:
+                            progress.coach_notes = f"[{date.today()}] Bulk advanced: {reason}"
+                        progress.save()
+                    
+                    # Award ELO points
+                    total_elo_awarded += topic.elo_points
+                    topics_completed += 1
+                    
+                    # Create recap schedule for spaced repetition
+                    try:
+                        RecapSchedule.create_for_progress(progress)
+                        logger.info(f"📅 Created recap schedule for {topic.name}")
+                    except Exception as recap_error:
+                        logger.warning(f"⚠️ Could not create recap schedule for {topic.name}: {recap_error}")
+                        
+                else:
+                    topics_skipped += 1
+                    logger.info(f"⏭️ Skipping already mastered topic: {topic.name}")
+            
+            # Calculate new ELO
+            _, new_elo = _calculate_student_level_and_elo(student)
+            
+            logger.info(f"✅ BULK ADVANCE COMPLETE:")
+            logger.info(f"   - Topics completed: {topics_completed}")
+            logger.info(f"   - Topics skipped: {topics_skipped}")
+            logger.info(f"   - ELO awarded: {total_elo_awarded}")
+            logger.info(f"   - New ELO: {new_elo}")
+            
+            # Success message
+            levels_text = " & ".join(levels_advanced)
+            messages.success(request, 
+                f"🚀 Successfully advanced {student.first_name} through {levels_text}! "
+                f"Completed {topics_completed} topics (+{total_elo_awarded} ELO). "
+                f"New ELO: {new_elo}"
+            )
+            
+            if topics_skipped > 0:
+                messages.info(request, f"ℹ️ Skipped {topics_skipped} topics that were already mastered.")
+            
+    except CurriculumLevel.DoesNotExist as e:
+        logger.error(f"❌ Curriculum level not found: {e}")
+        messages.error(request, f"Curriculum level not found: {e}")
+    except Exception as e:
+        logger.error(f"❌ Error in bulk advancement: {str(e)}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        messages.error(request, f"Error during bulk advancement: {str(e)}")
+    
+    return redirect('student_training', record_pk=record_pk)

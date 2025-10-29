@@ -206,6 +206,94 @@
             </div>
             {% endif %}
 
+            <!-- Quick Level Advancement Section -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <button class="btn btn-link text-decoration-none p-0 collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#quickAdvancement">
+                            <i class="bi bi-rocket text-primary me-2"></i>Quick Level Advancement
+                            <small class="text-muted ms-2">(Skip multiple topics at once)</small>
+                        </button>
+                    </h5>
+                </div>
+                <div id="quickAdvancement" class="collapse">
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>For advanced students:</strong> Use this feature to quickly advance students who already demonstrate mastery beyond their current level.
+                        </div>
+
+                        <form method="post" action="{% url 'bulk_advance_student' record.pk %}" onsubmit="return confirmBulkAdvancement()">
+                            {% csrf_token %}
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-target text-primary me-2"></i>Select Advancement Level</h6>
+                                    
+                                    <div class="advancement-options">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="radio" name="advancement_type" id="foundation" value="foundation" onchange="updateAdvancementInfo()">
+                                            <label class="form-check-label" for="foundation">
+                                                <strong>Complete Foundation Level</strong>
+                                                <small class="text-muted d-block">400-600 ELO • Basic piece movement & rules</small>
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="radio" name="advancement_type" id="tactical" value="tactical" onchange="updateAdvancementInfo()">
+                                            <label class="form-check-label" for="tactical">
+                                                <strong>Complete Tactical Awareness Level</strong>
+                                                <small class="text-muted d-block">600-800 ELO • Basic tactics & combinations</small>
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="radio" name="advancement_type" id="to_strategic" value="to_strategic" onchange="updateAdvancementInfo()">
+                                            <label class="form-check-label" for="to_strategic">
+                                                <strong>Advance to Strategic Level</strong>
+                                                <small class="text-muted d-block">Up to 800 ELO • Skip Foundation + Tactical</small>
+                                            </label>
+                                        </div>
+                                        
+                                        <div class="form-check mb-3">
+                                            <input class="form-check-input" type="radio" name="advancement_type" id="to_advanced" value="to_advanced" onchange="updateAdvancementInfo()">
+                                            <label class="form-check-label" for="to_advanced">
+                                                <strong>Advance to Advanced Level</strong>
+                                                <small class="text-muted d-block">Up to 1000 ELO • Skip Foundation + Tactical + Strategic</small>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-info-circle text-info me-2"></i>Advancement Summary</h6>
+                                    <div id="advancement-summary" class="bg-light p-3 rounded">
+                                        <p class="text-muted mb-0">Select an advancement option to see details</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="reason" class="form-label">
+                                    <i class="bi bi-pencil text-secondary me-1"></i>Reason for Advancement
+                                </label>
+                                <textarea class="form-control" id="reason" name="reason" rows="2" 
+                                          placeholder="e.g., Student demonstrates advanced understanding, transferring from another program, etc.">Advanced student - demonstrates mastery beyond current level</textarea>
+                            </div>
+
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-secondary" data-bs-toggle="collapse" data-bs-target="#quickAdvancement">
+                                    <i class="bi bi-x-circle me-1"></i>Cancel
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-rocket me-1"></i>Apply Advancement
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
             <!-- Recap Topics (if any) -->
             {% if recap_topics %}
             <div class="card mb-4">
@@ -373,5 +461,115 @@
         padding: 0;
     }
 </style>
+
+<!-- JavaScript for bulk advancement -->
+<script>
+function updateAdvancementInfo() {
+    const selectedValue = document.querySelector('input[name="advancement_type"]:checked')?.value;
+    const summaryDiv = document.getElementById('advancement-summary');
+    
+    if (!selectedValue) {
+        summaryDiv.innerHTML = '<p class="text-muted mb-0">Select an advancement option to see details</p>';
+        return;
+    }
+    
+    let content = '';
+    
+    switch(selectedValue) {
+        case 'foundation':
+            content = `
+                <div class="text-success">
+                    <i class="bi bi-check-circle me-2"></i><strong>Complete Foundation Level</strong>
+                </div>
+                <hr>
+                <div class="small">
+                    <div class="mb-2"><strong>Topics covered:</strong> Basic piece movement, rules, board setup</div>
+                    <div class="mb-2"><strong>ELO Range:</strong> 400-600</div>
+                    <div class="mb-2"><strong>Estimated topics:</strong> ~15 topics</div>
+                    <div class="text-info"><i class="bi bi-info-circle me-1"></i>Perfect for students who know the basics</div>
+                </div>
+            `;
+            break;
+            
+        case 'tactical':
+            content = `
+                <div class="text-warning">
+                    <i class="bi bi-lightning me-2"></i><strong>Complete Tactical Awareness Level</strong>
+                </div>
+                <hr>
+                <div class="small">
+                    <div class="mb-2"><strong>Topics covered:</strong> Basic tactics, pins, forks, skewers</div>
+                    <div class="mb-2"><strong>ELO Range:</strong> 600-800</div>
+                    <div class="mb-2"><strong>Estimated topics:</strong> ~12 topics</div>
+                    <div class="text-info"><i class="bi bi-info-circle me-1"></i>For students with tactical awareness</div>
+                </div>
+            `;
+            break;
+            
+        case 'to_strategic':
+            content = `
+                <div class="text-primary">
+                    <i class="bi bi-arrow-up-right me-2"></i><strong>Advance to Strategic Level</strong>
+                </div>
+                <hr>
+                <div class="small">
+                    <div class="mb-2"><strong>Completes:</strong> Foundation + Tactical Awareness</div>
+                    <div class="mb-2"><strong>Final ELO:</strong> ~800</div>
+                    <div class="mb-2"><strong>Estimated topics:</strong> ~27 topics</div>
+                    <div class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Major advancement - use carefully</div>
+                </div>
+            `;
+            break;
+            
+        case 'to_advanced':
+            content = `
+                <div class="text-danger">
+                    <i class="bi bi-rocket me-2"></i><strong>Advance to Advanced Level</strong>
+                </div>
+                <hr>
+                <div class="small">
+                    <div class="mb-2"><strong>Completes:</strong> Foundation + Tactical + Strategic</div>
+                    <div class="mb-2"><strong>Final ELO:</strong> ~1000</div>
+                    <div class="mb-2"><strong>Estimated topics:</strong> ~40+ topics</div>
+                    <div class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Massive advancement - only for very advanced students</div>
+                </div>
+            `;
+            break;
+    }
+    
+    summaryDiv.innerHTML = content;
+}
+
+function confirmBulkAdvancement() {
+    const selectedType = document.querySelector('input[name="advancement_type"]:checked')?.value;
+    const reason = document.getElementById('reason').value.trim();
+    
+    if (!selectedType) {
+        alert('Please select an advancement level.');
+        return false;
+    }
+    
+    if (!reason) {
+        alert('Please provide a reason for the advancement.');
+        document.getElementById('reason').focus();
+        return false;
+    }
+    
+    // Get advancement type display name
+    let typeName = '';
+    switch(selectedType) {
+        case 'foundation': typeName = 'Foundation Level'; break;
+        case 'tactical': typeName = 'Tactical Awareness Level'; break;
+        case 'to_strategic': typeName = 'Strategic Level'; break;
+        case 'to_advanced': typeName = 'Advanced Level'; break;
+        default: typeName = 'selected level';
+    }
+    
+    const studentName = '{{ student.first_name }} {{ student.last_name }}';
+    const message = `Are you sure you want to advance ${studentName} through ${typeName}?\n\nThis will mark multiple topics as mastered and cannot be easily undone.\n\nReason: ${reason}`;
+    
+    return confirm(message);
+}
+</script>
 
 {% endblock %}

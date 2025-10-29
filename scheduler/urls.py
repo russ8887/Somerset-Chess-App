@@ -21,6 +21,7 @@ urlpatterns = [
     # --- Chess Training System URLs ---
     path('training/<int:record_pk>/', views.student_training_view, name='student_training'),
     path('training/<int:record_pk>/mark-progress/', views.mark_training_progress, name='mark_training_progress'),
+    path('training/<int:record_pk>/bulk-advance/', views.bulk_advance_student, name='bulk_advance_student'),
 
     # --- HTMX partials for Dashboard ---
     path('attendance/<int:pk>/mark/<str:status>/', views.mark_attendance, name='mark-attendance'),
