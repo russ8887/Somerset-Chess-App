@@ -17,6 +17,10 @@ urlpatterns = [
     
     # --- New Fill-in Management URL ---
     path('lesson/<int:lesson_pk>/manage/', views.manage_lesson_view, name='manage-lesson'),
+    
+    # --- Chess Training System URLs ---
+    path('training/<int:record_pk>/', views.student_training_view, name='student_training'),
+    path('training/<int:record_pk>/mark-progress/', views.mark_training_progress, name='mark_training_progress'),
 
     # --- HTMX partials for Dashboard ---
     path('attendance/<int:pk>/mark/<str:status>/', views.mark_attendance, name='mark-attendance'),

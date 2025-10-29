@@ -1838,3 +1838,338 @@ def add_extra_lesson(request):
     
     # For GET requests, redirect to dashboard
     return redirect('dashboard')
+
+
+# =============================================================================
+# CHESS TRAINING SYSTEM VIEWS
+# =============================================================================
+
+@login_required
+def student_training_view(request, record_pk):
+    """Display and manage chess training for a specific student in a lesson"""
+    from datetime import date
+    from .models import CurriculumLevel, CurriculumTopic, StudentProgress, RecapSchedule
+    
+    # Get the attendance record (links student to specific lesson)
+    record = get_object_or_404(
+        AttendanceRecord.objects.select_related(
+            'enrollment__student__school_class',
+            'enrollment__term',
+            'lesson_session__scheduled_group__coach__user',
+            'lesson_session__scheduled_group__time_slot'
+        ),
+        pk=record_pk
+    )
+    
+    student = record.enrollment.student
+    lesson = record.lesson_session
+    
+    # Initialize student progress if this is their first time in training
+    _initialize_student_progress(student)
+    
+    # Get current curriculum level based on completed topics
+    current_level, current_elo = _calculate_student_level_and_elo(student)
+    
+    # Get current topic (next topic to work on)
+    current_topic = _get_current_topic_for_student(student, current_level)
+    
+    # Get topics due for recap
+    recap_topics = _get_topics_due_for_recap(student, lesson)
+    
+    # Get recently mastered topics for display
+    recent_progress = StudentProgress.objects.filter(
+        student=student,
+        status=StudentProgress.Status.MASTERED
+    ).select_related('topic__level').order_by('-mastery_date')[:5]
+    
+    # Get progress summary
+    progress_summary = _get_student_progress_summary(student)
+    
+    context = {
+        'record': record,
+        'student': student,
+        'lesson': lesson,
+        'current_level': current_level,
+        'current_elo': current_elo,
+        'current_topic': current_topic,
+        'recap_topics': recap_topics,
+        'recent_progress': recent_progress,
+        'progress_summary': progress_summary,
+        # Navigation context
+        'lesson_date': lesson.lesson_date.isoformat(),
+        'lesson_id': lesson.pk,
+    }
+    
+    return render(request, 'scheduler/student_training.html', context)
+
+
+@login_required
+@require_POST
+def mark_training_progress(request, record_pk):
+    """Mark progress on a training topic and handle ELO updates"""
+    from django.contrib import messages
+    from datetime import date
+    from .models import StudentProgress, RecapSchedule
+    
+    record = get_object_or_404(AttendanceRecord, pk=record_pk)
+    student = record.enrollment.student
+    lesson = record.lesson_session
+    
+    topic_id = request.POST.get('topic_id')
+    result = request.POST.get('result')  # 'pass', 'review', 'not_ready'
+    notes = request.POST.get('notes', '').strip()
+    
+    if not topic_id or not result:
+        messages.error(request, "Missing required information.")
+        return redirect('student_training', record_pk=record_pk)
+    
+    try:
+        topic = get_object_or_404(CurriculumTopic, pk=topic_id)
+        
+        # Get or create progress record
+        progress, created = StudentProgress.objects.get_or_create(
+            student=student,
+            topic=topic,
+            defaults={
+                'status': StudentProgress.Status.NOT_STARTED,
+                'attempts': 0,
+                'coach_notes': ''
+            }
+        )
+        
+        # Update progress based on result
+        progress.attempts += 1
+        progress.last_attempted_date = date.today()
+        progress.last_lesson_session = lesson
+        
+        # Add coach notes
+        if notes:
+            if progress.coach_notes:
+                progress.coach_notes += f"\n[{date.today()}] {notes}"
+            else:
+                progress.coach_notes = f"[{date.today()}] {notes}"
+        
+        if result == 'pass':
+            progress.status = StudentProgress.Status.MASTERED
+            progress.mastery_date = date.today()
+            progress.pass_percentage = 100
+            
+            # Create recap schedule for spaced repetition
+            RecapSchedule.create_for_progress(progress)
+            
+            messages.success(request, f"🎉 {student.first_name} has mastered '{topic.name}'! (+{topic.elo_points} ELO)")
+            
+        elif result == 'review':
+            progress.status = StudentProgress.Status.NEEDS_REVIEW
+            progress.pass_percentage = 75
+            messages.info(request, f"📝 {topic.name} marked for review. {student.first_name} is making progress!")
+            
+        elif result == 'not_ready':
+            progress.status = StudentProgress.Status.IN_PROGRESS
+            progress.pass_percentage = 25
+            messages.info(request, f"📚 {student.first_name} needs more practice with '{topic.name}'.")
+        
+        progress.save()
+        
+        # Handle recap topic marking
+        if request.POST.get('is_recap') == 'true':
+            recap_result = 'PASS' if result == 'pass' else 'FAIL'
+            
+            try:
+                recap_schedule = RecapSchedule.objects.get(
+                    progress__student=student,
+                    progress__topic=topic
+                )
+                recap_schedule.mark_recap_completed(recap_result)
+                
+                if recap_result == 'PASS':
+                    messages.success(request, f"✅ Recap passed! Next recap in {recap_schedule.current_interval} lessons.")
+                else:
+                    messages.info(request, f"📖 Recap needs work. Schedule reset to help reinforce learning.")
+                    
+            except RecapSchedule.DoesNotExist:
+                pass  # No recap schedule found
+        
+    except Exception as e:
+        messages.error(request, f"Error updating progress: {str(e)}")
+    
+    return redirect('student_training', record_pk=record_pk)
+
+
+def _initialize_student_progress(student):
+    """Initialize progress records for a student starting training"""
+    from .models import CurriculumLevel, StudentProgress
+    
+    # Check if student already has progress records
+    if StudentProgress.objects.filter(student=student).exists():
+        return  # Already initialized
+    
+    # Get foundation level topics to initialize
+    try:
+        foundation_level = CurriculumLevel.objects.get(name='FOUNDATION')
+        foundation_topics = foundation_level.topics.filter(is_active=True).order_by('sort_order')
+        
+        # Create NOT_STARTED progress records for foundation topics
+        progress_records = []
+        for topic in foundation_topics:
+            progress_records.append(
+                StudentProgress(
+                    student=student,
+                    topic=topic,
+                    status=StudentProgress.Status.NOT_STARTED,
+                    attempts=0,
+                    coach_notes=f'Initialized for {student.first_name} on first training session'
+                )
+            )
+        
+        if progress_records:
+            StudentProgress.objects.bulk_create(progress_records, ignore_conflicts=True)
+            
+    except CurriculumLevel.DoesNotExist:
+        pass  # No foundation level found
+
+
+def _calculate_student_level_and_elo(student):
+    """Calculate student's current curriculum level and ELO based on mastered topics"""
+    from .models import CurriculumLevel, StudentProgress
+    
+    # Get all mastered topics
+    mastered_progress = StudentProgress.objects.filter(
+        student=student,
+        status=StudentProgress.Status.MASTERED
+    ).select_related('topic__level')
+    
+    # Calculate total ELO points earned
+    total_elo = sum(progress.topic.elo_points for progress in mastered_progress)
+    current_elo = 400 + total_elo  # Base ELO of 400
+    
+    # Determine current level based on ELO
+    try:
+        current_level = CurriculumLevel.objects.filter(
+            min_elo__lte=current_elo,
+            max_elo__gte=current_elo
+        ).first()
+        
+        if not current_level:
+            # If ELO is above all levels, use highest level
+            current_level = CurriculumLevel.objects.order_by('-max_elo').first()
+        
+        return current_level, current_elo
+        
+    except CurriculumLevel.DoesNotExist:
+        # Fallback to foundation level
+        foundation_level = CurriculumLevel.objects.filter(name='FOUNDATION').first()
+        return foundation_level, current_elo
+
+
+def _get_current_topic_for_student(student, current_level):
+    """Get the next topic the student should work on"""
+    from .models import StudentProgress, TopicPrerequisite
+    
+    if not current_level:
+        return None
+    
+    # Get all topics for current level
+    level_topics = current_level.topics.filter(is_active=True).order_by('sort_order')
+    
+    for topic in level_topics:
+        # Check if student has already mastered this topic
+        try:
+            progress = StudentProgress.objects.get(student=student, topic=topic)
+            if progress.status == StudentProgress.Status.MASTERED:
+                continue  # Skip mastered topics
+        except StudentProgress.DoesNotExist:
+            pass
+        
+        # Check if prerequisites are met
+        prerequisites = TopicPrerequisite.objects.filter(required_for=topic)
+        prerequisites_met = True
+        
+        for prereq in prerequisites:
+            try:
+                prereq_progress = StudentProgress.objects.get(
+                    student=student, 
+                    topic=prereq.prerequisite
+                )
+                if prereq.is_strict and prereq_progress.status != StudentProgress.Status.MASTERED:
+                    prerequisites_met = False
+                    break
+            except StudentProgress.DoesNotExist:
+                if prereq.is_strict:
+                    prerequisites_met = False
+                    break
+        
+        if prerequisites_met:
+            return topic
+    
+    # If all topics in current level are mastered, get first topic from next level
+    next_level = CurriculumLevel.objects.filter(
+        sort_order__gt=current_level.sort_order
+    ).order_by('sort_order').first()
+    
+    if next_level:
+        return next_level.topics.filter(is_active=True).order_by('sort_order').first()
+    
+    return None
+
+
+def _get_topics_due_for_recap(student, lesson):
+    """Get topics that are due for spaced repetition recap"""
+    from .models import RecapSchedule
+    
+    # Get recap schedules where it's time for the next recap
+    recap_schedules = RecapSchedule.objects.filter(
+        progress__student=student,
+        next_recap_lesson__lte=_get_student_lesson_count(student)
+    ).select_related('progress__topic').order_by('next_recap_lesson')
+    
+    return [schedule.progress.topic for schedule in recap_schedules[:3]]  # Limit to 3 recaps per lesson
+
+
+def _get_student_lesson_count(student):
+    """Get total number of lessons student has attended"""
+    from .models import AttendanceRecord
+    
+    return AttendanceRecord.objects.filter(
+        enrollment__student=student,
+        status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+    ).count()
+
+
+def _get_student_progress_summary(student):
+    """Get summary of student's overall progress"""
+    from .models import StudentProgress, CurriculumLevel
+    
+    # Get progress counts by status
+    progress_counts = StudentProgress.objects.filter(student=student).values('status').annotate(
+        count=Count('id')
+    )
+    
+    status_summary = {status[0]: 0 for status in StudentProgress.Status.choices}
+    for item in progress_counts:
+        status_summary[item['status']] = item['count']
+    
+    # Get progress by level
+    level_progress = {}
+    for level in CurriculumLevel.objects.all().order_by('sort_order'):
+        mastered_count = StudentProgress.objects.filter(
+            student=student,
+            topic__level=level,
+            status=StudentProgress.Status.MASTERED
+        ).count()
+        
+        total_count = level.topics.filter(is_active=True).count()
+        
+        if total_count > 0:
+            level_progress[level.name] = {
+                'mastered': mastered_count,
+                'total': total_count,
+                'percentage': round((mastered_count / total_count) * 100, 1)
+            }
+    
+    return {
+        'status_counts': status_summary,
+        'level_progress': level_progress,
+        'total_topics_available': sum(lp['total'] for lp in level_progress.values()),
+        'total_mastered': status_summary.get(StudentProgress.Status.MASTERED, 0)
+    }

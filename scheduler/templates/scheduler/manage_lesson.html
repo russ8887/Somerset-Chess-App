@@ -34,13 +34,18 @@
                                 </span>
                             </td>
                             <td>
-                                {% if record.status == 'FILL_IN' %}
-                                    <form method="post" style="display: inline;">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="remove_record_pk" value="{{ record.pk }}">
-                                        <button type="submit" class="btn btn-outline-danger btn-sm">Remove</button>
-                                    </form>
-                                {% endif %}
+                                <div class="btn-group" role="group">
+                                    <a href="{% url 'student_training' record.pk %}" class="btn btn-primary btn-sm" title="Chess Training">
+                                        <i class="bi bi-mortarboard"></i> Training
+                                    </a>
+                                    {% if record.status == 'FILL_IN' %}
+                                        <form method="post" style="display: inline;">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="remove_record_pk" value="{{ record.pk }}">
+                                            <button type="submit" class="btn btn-outline-danger btn-sm">Remove</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% empty %}
