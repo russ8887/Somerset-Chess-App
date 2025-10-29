@@ -4,7 +4,9 @@ from django.contrib import admin
 from django.db import models
 from .models import (
     Term, TimeSlot, SchoolClass, Coach, Student, Enrollment,
-    ScheduledGroup, ScheduledUnavailability, OneOffEvent, LessonSession, AttendanceRecord, LessonNote
+    ScheduledGroup, ScheduledUnavailability, OneOffEvent, LessonSession, AttendanceRecord, LessonNote,
+    # Chess Training Curriculum Models
+    CurriculumLevel, CurriculumTopic, TopicPrerequisite, StudentProgress, RecapSchedule
 )
 
 # --- Configuration for Basic Models ---
@@ -482,3 +484,211 @@ class OneOffEventAdmin(admin.ModelAdmin):
             
             time_info = "all day" if not obj.time_slots.exists() else f"{obj.time_slots.count()} time slots"
             messages.success(request, f'Event "{obj.name}" created successfully. Will affect approximately {affected_count} students for {time_info} on {obj.event_date}.')
+
+
+# =============================================================================
+# CHESS TRAINING CURRICULUM ADMIN
+# =============================================================================
+
+@admin.register(CurriculumLevel)
+class CurriculumLevelAdmin(admin.ModelAdmin):
+    list_display = ('name', 'min_elo', 'max_elo', 'sort_order', 'get_topics_count')
+    list_editable = ('sort_order',)
+    ordering = ('sort_order',)
+    
+    @admin.display(description='Topics Count')
+    def get_topics_count(self, obj):
+        return obj.topics.count()
+    
+    fieldsets = (
+        ('Level Details', {
+            'fields': ('name', 'description', 'sort_order')
+        }),
+        ('ELO Range', {
+            'fields': ('min_elo', 'max_elo'),
+            'description': 'ELO range for students at this level'
+        }),
+    )
+
+
+@admin.register(CurriculumTopic)
+class CurriculumTopicAdmin(admin.ModelAdmin):
+    list_display = ('name', 'level', 'category', 'sort_order', 'estimated_time_min', 'elo_points', 'is_active')
+    list_filter = ('level', 'category', 'is_active')
+    search_fields = ('name', 'category', 'learning_objective')
+    list_editable = ('sort_order', 'is_active')
+    ordering = ('level__sort_order', 'sort_order')
+    
+    fieldsets = (
+        ('Topic Information', {
+            'fields': ('level', 'name', 'category', 'sort_order', 'is_active')
+        }),
+        ('Learning Content', {
+            'fields': ('learning_objective', 'teaching_method', 'practice_activities', 'pass_criteria'),
+            'description': 'Core teaching content for coaches'
+        }),
+        ('Enhancement & Common Issues', {
+            'fields': ('enhancement_activities', 'common_mistakes'),
+            'classes': ('collapse',),
+            'description': 'Additional content for advanced students and troubleshooting'
+        }),
+        ('Time & Scoring', {
+            'fields': ('estimated_time_min', 'estimated_time_max', 'elo_points'),
+            'description': 'Lesson planning and progression tracking'
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('level')
+
+
+@admin.register(TopicPrerequisite)
+class TopicPrerequisiteAdmin(admin.ModelAdmin):
+    list_display = ('prerequisite', 'required_for', 'is_strict')
+    list_filter = ('is_strict', 'prerequisite__level', 'required_for__level')
+    search_fields = ('prerequisite__name', 'required_for__name')
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'prerequisite__level', 'required_for__level'
+        )
+    
+    fieldsets = (
+        ('Prerequisite Relationship', {
+            'fields': ('prerequisite', 'required_for'),
+            'description': 'Define which topic must be completed before another can be started'
+        }),
+        ('Requirement Type', {
+            'fields': ('is_strict',),
+            'description': 'Strict = must be completed. Non-strict = recommended but not required.'
+        }),
+    )
+
+
+@admin.register(StudentProgress)
+class StudentProgressAdmin(admin.ModelAdmin):
+    list_display = ('student', 'topic', 'status', 'attempts', 'mastery_date', 'pass_percentage')
+    list_filter = ('status', 'topic__level', 'mastery_date')
+    search_fields = ('student__first_name', 'student__last_name', 'topic__name')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Student & Topic', {
+            'fields': ('student', 'topic', 'status')
+        }),
+        ('Progress Details', {
+            'fields': ('attempts', 'pass_percentage', 'mastery_date', 'last_attempted_date', 'last_lesson_session')
+        }),
+        ('Coach Notes', {
+            'fields': ('coach_notes',),
+            'classes': ('wide',)
+        }),
+        ('System Info', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'student', 'topic__level', 'last_lesson_session'
+        )
+    
+    actions = ['mark_as_mastered', 'reset_progress']
+    
+    @admin.action(description='Mark selected progress as mastered')
+    def mark_as_mastered(self, request, queryset):
+        from datetime import date
+        from django.contrib import messages
+        
+        count = 0
+        for progress in queryset:
+            if progress.status != StudentProgress.Status.MASTERED:
+                progress.status = StudentProgress.Status.MASTERED
+                progress.mastery_date = date.today()
+                progress.save()
+                
+                # Create recap schedule
+                try:
+                    RecapSchedule.create_for_progress(progress)
+                except Exception:
+                    pass  # Schedule might already exist
+                
+                count += 1
+        
+        messages.success(request, f'Marked {count} topic(s) as mastered and created recap schedules.')
+    
+    @admin.action(description='Reset selected progress to not started')
+    def reset_progress(self, request, queryset):
+        from django.contrib import messages
+        
+        count = queryset.update(
+            status=StudentProgress.Status.NOT_STARTED,
+            attempts=0,
+            mastery_date=None,
+            pass_percentage=None,
+            coach_notes=''
+        )
+        
+        messages.success(request, f'Reset {count} progress record(s).')
+
+
+@admin.register(RecapSchedule)
+class RecapScheduleAdmin(admin.ModelAdmin):
+    list_display = ('get_student', 'get_topic', 'current_interval', 'next_recap_lesson', 'total_recaps', 'last_recap_result')
+    list_filter = ('current_interval', 'last_recap_result', 'progress__topic__level')
+    search_fields = ('progress__student__first_name', 'progress__student__last_name', 'progress__topic__name')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    @admin.display(description='Student', ordering='progress__student__last_name')
+    def get_student(self, obj):
+        return obj.progress.student
+    
+    @admin.display(description='Topic', ordering='progress__topic__name')
+    def get_topic(self, obj):
+        return obj.progress.topic.name
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'progress__student', 'progress__topic'
+        )
+    
+    fieldsets = (
+        ('Student & Topic', {
+            'fields': ('progress',)
+        }),
+        ('Schedule Settings', {
+            'fields': ('current_interval', 'next_recap_lesson')
+        }),
+        ('Recap History', {
+            'fields': ('total_recaps', 'successful_recaps', 'last_recap_date', 'last_recap_result')
+        }),
+        ('System Info', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['mark_recap_completed_pass', 'mark_recap_completed_fail']
+    
+    @admin.action(description='Mark recap as completed (PASS)')
+    def mark_recap_completed_pass(self, request, queryset):
+        from django.contrib import messages
+        
+        count = 0
+        for schedule in queryset:
+            schedule.mark_recap_completed('PASS')
+            count += 1
+        
+        messages.success(request, f'Marked {count} recap(s) as passed and updated schedules.')
+    
+    @admin.action(description='Mark recap as completed (FAIL)')
+    def mark_recap_completed_fail(self, request, queryset):
+        from django.contrib import messages
+        
+        count = 0
+        for schedule in queryset:
+            schedule.mark_recap_completed('FAIL')
+            count += 1
+        
+        messages.success(request, f'Marked {count} recap(s) as failed and reset intervals.')

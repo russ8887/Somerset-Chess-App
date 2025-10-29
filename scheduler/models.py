@@ -682,3 +682,301 @@ class LessonNote(models.Model):
     def get_form(self):
         from .forms import LessonNoteForm
         return LessonNoteForm(instance=self)
+
+
+# =============================================================================
+# CHESS TRAINING CURRICULUM SYSTEM
+# =============================================================================
+
+class CurriculumLevel(models.Model):
+    """
+    Represents the main levels of chess curriculum (Foundation, Intermediate, Advanced, etc.)
+    """
+    class Level(models.TextChoices):
+        FOUNDATION = 'FOUNDATION', 'Foundation (400-600 ELO)'
+        TACTICAL = 'TACTICAL', 'Tactical Awareness (600-800 ELO)'
+        STRATEGIC = 'STRATEGIC', 'Strategic Thinking (800-1000 ELO)'
+        ADVANCED = 'ADVANCED', 'Advanced Concepts (1000-1200 ELO)'
+        MASTERY = 'MASTERY', 'Mastery Path (1200+ ELO)'
+    
+    name = models.CharField(max_length=20, choices=Level.choices, unique=True)
+    description = models.TextField(help_text="Description of what students learn at this level")
+    min_elo = models.IntegerField(help_text="Minimum ELO for this level")
+    max_elo = models.IntegerField(help_text="Maximum ELO for this level")
+    sort_order = models.IntegerField(default=0, help_text="Order in which levels should be completed")
+    
+    class Meta:
+        ordering = ['sort_order']
+        verbose_name = "Curriculum Level"
+        verbose_name_plural = "Curriculum Levels"
+    
+    def __str__(self):
+        return f"{self.get_name_display()}"
+
+
+class CurriculumTopic(models.Model):
+    """
+    Individual topics/lessons within the curriculum (e.g., "Rook Movement", "Knight Forks")
+    """
+    level = models.ForeignKey(CurriculumLevel, on_delete=models.CASCADE, related_name='topics')
+    name = models.CharField(max_length=200, help_text="Topic name (e.g., 'Rook Movement')")
+    category = models.CharField(max_length=100, help_text="Category (e.g., 'Piece Basics', 'Basic Tactics')")
+    sort_order = models.IntegerField(default=0, help_text="Order within the level")
+    
+    # Teaching Instructions
+    learning_objective = models.TextField(help_text="What the student must understand/demonstrate")
+    teaching_method = models.TextField(help_text="Step-by-step instructions for coaches")
+    practice_activities = models.TextField(help_text="Hands-on exercises and games")
+    pass_criteria = models.TextField(help_text="Specific requirements to pass this topic")
+    enhancement_activities = models.TextField(
+        blank=True, 
+        help_text="Extra activities for students who master quickly"
+    )
+    common_mistakes = models.TextField(
+        blank=True, 
+        help_text="What coaches should watch out for"
+    )
+    
+    # Time and Prerequisites
+    estimated_time_min = models.IntegerField(
+        default=15, 
+        help_text="Estimated time in minutes for average student"
+    )
+    estimated_time_max = models.IntegerField(
+        default=30, 
+        help_text="Maximum time including enhancements"
+    )
+    elo_points = models.IntegerField(
+        default=10, 
+        help_text="ELO points awarded for mastering this topic"
+    )
+    
+    # Status and metadata
+    is_active = models.BooleanField(default=True, help_text="Whether this topic is currently used")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['level__sort_order', 'sort_order']
+        unique_together = ['level', 'name']
+        verbose_name = "Curriculum Topic"
+        verbose_name_plural = "Curriculum Topics"
+    
+    def __str__(self):
+        return f"{self.level.get_name_display()} - {self.name}"
+    
+    def get_prerequisites(self):
+        """Get all topics that must be completed before this one"""
+        return CurriculumTopic.objects.filter(
+            topicprerequisite__required_for=self
+        ).order_by('level__sort_order', 'sort_order')
+    
+    def get_next_topics(self):
+        """Get topics that become available after completing this one"""
+        return CurriculumTopic.objects.filter(
+            topicprerequisite__prerequisite=self
+        ).order_by('level__sort_order', 'sort_order')
+
+
+class TopicPrerequisite(models.Model):
+    """
+    Defines which topics must be completed before others
+    """
+    prerequisite = models.ForeignKey(
+        CurriculumTopic, 
+        on_delete=models.CASCADE, 
+        related_name='unlocks'
+    )
+    required_for = models.ForeignKey(
+        CurriculumTopic, 
+        on_delete=models.CASCADE, 
+        related_name='prerequisites'
+    )
+    is_strict = models.BooleanField(
+        default=True, 
+        help_text="If True, prerequisite MUST be completed. If False, it's just recommended."
+    )
+    
+    class Meta:
+        unique_together = ['prerequisite', 'required_for']
+        verbose_name = "Topic Prerequisite"
+        verbose_name_plural = "Topic Prerequisites"
+    
+    def __str__(self):
+        strict = " (Required)" if self.is_strict else " (Recommended)"
+        return f"{self.prerequisite.name} → {self.required_for.name}{strict}"
+
+
+class StudentProgress(models.Model):
+    """
+    Tracks individual student progress through the curriculum
+    """
+    class Status(models.TextChoices):
+        NOT_STARTED = 'NOT_STARTED', 'Not Started'
+        IN_PROGRESS = 'IN_PROGRESS', 'In Progress'
+        MASTERED = 'MASTERED', 'Mastered'
+        NEEDS_REVIEW = 'NEEDS_REVIEW', 'Needs Review'
+        FAILED = 'FAILED', 'Failed Assessment'
+    
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='curriculum_progress')
+    topic = models.ForeignKey(CurriculumTopic, on_delete=models.CASCADE, related_name='student_progress')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NOT_STARTED)
+    
+    # Progress tracking
+    attempts = models.IntegerField(default=0, help_text="Number of times this topic has been attempted")
+    mastery_date = models.DateField(null=True, blank=True, help_text="Date when topic was mastered")
+    last_attempted_date = models.DateField(null=True, blank=True)
+    last_lesson_session = models.ForeignKey(
+        LessonSession, 
+        null=True, 
+        blank=True, 
+        on_delete=models.SET_NULL,
+        help_text="Last lesson where this topic was worked on"
+    )
+    
+    # Assessment details
+    coach_notes = models.TextField(blank=True, help_text="Coach observations and notes")
+    pass_percentage = models.IntegerField(
+        null=True, 
+        blank=True, 
+        help_text="Percentage score on assessment (0-100)"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['student', 'topic']
+        ordering = ['topic__level__sort_order', 'topic__sort_order']
+        verbose_name = "Student Progress"
+        verbose_name_plural = "Student Progress"
+    
+    def __str__(self):
+        return f"{self.student} - {self.topic.name} ({self.get_status_display()})"
+    
+    def is_due_for_recap(self):
+        """Check if this mastered topic is due for a recap session"""
+        if self.status != self.Status.MASTERED or not self.mastery_date:
+            return False
+        
+        try:
+            recap = self.recap_schedule.get()
+            return recap.is_due()
+        except RecapSchedule.DoesNotExist:
+            # No recap schedule exists, create one
+            RecapSchedule.create_for_progress(self)
+            return RecapSchedule.objects.get(progress=self).is_due()
+    
+    def calculate_current_elo(self):
+        """Calculate student's current ELO based on mastered topics"""
+        mastered_topics = StudentProgress.objects.filter(
+            student=self.student,
+            status=self.Status.MASTERED
+        ).select_related('topic')
+        
+        base_elo = 400  # Starting ELO
+        earned_points = sum(progress.topic.elo_points for progress in mastered_topics)
+        
+        return base_elo + earned_points
+
+
+class RecapSchedule(models.Model):
+    """
+    Manages the spaced repetition schedule for reviewing mastered topics
+    """
+    progress = models.OneToOneField(
+        StudentProgress, 
+        on_delete=models.CASCADE, 
+        related_name='recap_schedule'
+    )
+    
+    # Spaced repetition intervals (in lessons)
+    current_interval = models.IntegerField(default=4, help_text="Current interval between recaps")
+    next_recap_lesson = models.IntegerField(help_text="Lesson number when recap is due")
+    
+    # Recap history
+    total_recaps = models.IntegerField(default=0, help_text="Total number of recaps completed")
+    successful_recaps = models.IntegerField(default=0, help_text="Number of successful recaps")
+    last_recap_date = models.DateField(null=True, blank=True)
+    last_recap_result = models.CharField(
+        max_length=10,
+        choices=[
+            ('PASS', 'Passed'),
+            ('REVIEW', 'Needs Review'),
+            ('FAIL', 'Failed')
+        ],
+        null=True,
+        blank=True
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Recap Schedule"
+        verbose_name_plural = "Recap Schedules"
+    
+    def __str__(self):
+        return f"{self.progress.student} - {self.progress.topic.name} (Next: Lesson {self.next_recap_lesson})"
+    
+    @classmethod
+    def create_for_progress(cls, progress):
+        """Create a recap schedule for newly mastered progress"""
+        if progress.status != StudentProgress.Status.MASTERED:
+            raise ValueError("Can only create recap schedule for mastered topics")
+        
+        # Calculate next recap lesson number
+        current_lesson_count = AttendanceRecord.objects.filter(
+            enrollment__student=progress.student,
+            status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+        ).count()
+        
+        next_lesson = current_lesson_count + 4  # First recap after 4 lessons
+        
+        return cls.objects.create(
+            progress=progress,
+            current_interval=4,
+            next_recap_lesson=next_lesson
+        )
+    
+    def is_due(self):
+        """Check if recap is currently due"""
+        current_lesson_count = AttendanceRecord.objects.filter(
+            enrollment__student=self.progress.student,
+            status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+        ).count()
+        
+        return current_lesson_count >= self.next_recap_lesson
+    
+    def mark_recap_completed(self, result):
+        """Mark a recap as completed and schedule the next one"""
+        from datetime import date
+        
+        self.last_recap_date = date.today()
+        self.last_recap_result = result
+        self.total_recaps += 1
+        
+        if result == 'PASS':
+            self.successful_recaps += 1
+            # Double the interval for successful recaps (4 → 8 → 16 → 32)
+            self.current_interval = min(self.current_interval * 2, 32)
+        elif result == 'REVIEW':
+            # Keep same interval for topics that need review
+            pass
+        else:  # FAIL
+            # Reset to shorter interval for failed recaps
+            self.current_interval = 4
+            # Mark the original progress as needing review
+            self.progress.status = StudentProgress.Status.NEEDS_REVIEW
+            self.progress.save()
+        
+        # Schedule next recap
+        current_lesson_count = AttendanceRecord.objects.filter(
+            enrollment__student=self.progress.student,
+            status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']
+        ).count()
+        
+        self.next_recap_lesson = current_lesson_count + self.current_interval
+        self.save()
