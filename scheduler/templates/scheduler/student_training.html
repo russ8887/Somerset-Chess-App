@@ -286,12 +286,8 @@
                             <small class="fw-bold">{{ level_name|title }}</small>
                             <small>{{ level_data.mastered }}/{{ level_data.total }}</small>
                         </div>
-                        <div class="progress" style="height: 8px;">
-                            <div class="progress-bar 
-                                {% if level_data.percentage >= 80 %}bg-success
-                                {% elif level_data.percentage >= 50 %}bg-warning
-                                {% else %}bg-danger
-                                {% endif %}" 
+                        <div class="progress" style="height: 8px">
+                            <div class="progress-bar bg-success" 
                                  role="progressbar" 
                                  style="width: {{ level_data.percentage }}%"
                                  aria-valuenow="{{ level_data.percentage }}" 
