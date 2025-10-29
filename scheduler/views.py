@@ -1906,25 +1906,43 @@ def student_training_view(request, record_pk):
 @login_required
 @require_POST
 def mark_training_progress(request, record_pk):
-    """Mark progress on a training topic and handle ELO updates"""
+    """Mark progress on a training topic and handle ELO updates - ENHANCED with debugging"""
+    import logging
     from django.contrib import messages
     from datetime import date
-    from .models import StudentProgress, RecapSchedule
+    from .models import StudentProgress, RecapSchedule, CurriculumTopic
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"🎯 TRAINING DEBUG: mark_training_progress called for record {record_pk}")
     
     record = get_object_or_404(AttendanceRecord, pk=record_pk)
     student = record.enrollment.student
     lesson = record.lesson_session
     
+    logger.info(f"🎯 Student: {student.first_name} {student.last_name} (ID: {student.id})")
+    
     topic_id = request.POST.get('topic_id')
     result = request.POST.get('result')  # 'pass', 'review', 'not_ready'
     notes = request.POST.get('notes', '').strip()
+    is_recap = request.POST.get('is_recap') == 'true'
+    
+    logger.info(f"🎯 Form data: topic_id={topic_id}, result={result}, is_recap={is_recap}")
+    logger.info(f"🎯 Notes: {notes[:100]}..." if len(notes) > 100 else f"🎯 Notes: {notes}")
     
     if not topic_id or not result:
+        logger.error(f"❌ Missing required info: topic_id={topic_id}, result={result}")
         messages.error(request, "Missing required information.")
         return redirect('student_training', record_pk=record_pk)
     
     try:
-        topic = get_object_or_404(CurriculumTopic, pk=topic_id)
+        # Get the topic
+        try:
+            topic = CurriculumTopic.objects.get(pk=topic_id)
+            logger.info(f"✅ Found topic: {topic.name} (Level: {topic.level.name})")
+        except CurriculumTopic.DoesNotExist:
+            logger.error(f"❌ Topic not found: {topic_id}")
+            messages.error(request, f"Topic not found: {topic_id}")
+            return redirect('student_training', record_pk=record_pk)
         
         # Get or create progress record
         progress, created = StudentProgress.objects.get_or_create(
@@ -1937,6 +1955,9 @@ def mark_training_progress(request, record_pk):
             }
         )
         
+        logger.info(f"📊 Progress record: {'created new' if created else 'found existing'}")
+        logger.info(f"📊 Previous status: {progress.status}, attempts: {progress.attempts}")
+        
         # Update progress based on result
         progress.attempts += 1
         progress.last_attempted_date = date.today()
@@ -1948,32 +1969,57 @@ def mark_training_progress(request, record_pk):
                 progress.coach_notes += f"\n[{date.today()}] {notes}"
             else:
                 progress.coach_notes = f"[{date.today()}] {notes}"
+            logger.info(f"📝 Added coach notes")
         
+        # Handle different results
         if result == 'pass':
             progress.status = StudentProgress.Status.MASTERED
             progress.mastery_date = date.today()
             progress.pass_percentage = 100
+            logger.info(f"🎉 Topic MASTERED: {topic.name} (+{topic.elo_points} ELO)")
             
-            # Create recap schedule for spaced repetition
-            RecapSchedule.create_for_progress(progress)
+            # Create recap schedule for spaced repetition (only for regular topics, not recaps)
+            if not is_recap:
+                try:
+                    recap_schedule = RecapSchedule.create_for_progress(progress)
+                    logger.info(f"📅 Created recap schedule for topic {topic.name}")
+                except Exception as recap_error:
+                    logger.error(f"❌ Error creating recap schedule: {recap_error}")
+                    # Don't fail the whole operation for recap schedule issues
             
             messages.success(request, f"🎉 {student.first_name} has mastered '{topic.name}'! (+{topic.elo_points} ELO)")
             
         elif result == 'review':
             progress.status = StudentProgress.Status.NEEDS_REVIEW
             progress.pass_percentage = 75
+            logger.info(f"📝 Topic needs review: {topic.name}")
             messages.info(request, f"📝 {topic.name} marked for review. {student.first_name} is making progress!")
             
         elif result == 'not_ready':
             progress.status = StudentProgress.Status.IN_PROGRESS
             progress.pass_percentage = 25
+            logger.info(f"📚 Topic in progress: {topic.name}")
             messages.info(request, f"📚 {student.first_name} needs more practice with '{topic.name}'.")
         
-        progress.save()
+        else:
+            logger.error(f"❌ Invalid result value: {result}")
+            messages.error(request, f"Invalid result value: {result}")
+            return redirect('student_training', record_pk=record_pk)
+        
+        # Save the progress
+        try:
+            progress.save()
+            logger.info(f"✅ Progress saved successfully")
+            logger.info(f"📊 New status: {progress.status}, attempts: {progress.attempts}")
+        except Exception as save_error:
+            logger.error(f"❌ Error saving progress: {save_error}")
+            messages.error(request, f"Error saving progress: {save_error}")
+            return redirect('student_training', record_pk=record_pk)
         
         # Handle recap topic marking
-        if request.POST.get('is_recap') == 'true':
+        if is_recap:
             recap_result = 'PASS' if result == 'pass' else 'FAIL'
+            logger.info(f"📅 Processing recap: {recap_result}")
             
             try:
                 recap_schedule = RecapSchedule.objects.get(
@@ -1981,6 +2027,7 @@ def mark_training_progress(request, record_pk):
                     progress__topic=topic
                 )
                 recap_schedule.mark_recap_completed(recap_result)
+                logger.info(f"📅 Recap schedule updated")
                 
                 if recap_result == 'PASS':
                     messages.success(request, f"✅ Recap passed! Next recap in {recap_schedule.current_interval} lessons.")
@@ -1988,12 +2035,55 @@ def mark_training_progress(request, record_pk):
                     messages.info(request, f"📖 Recap needs work. Schedule reset to help reinforce learning.")
                     
             except RecapSchedule.DoesNotExist:
+                logger.warning(f"⚠️ No recap schedule found for topic {topic.name}")
                 pass  # No recap schedule found
         
+        # Debug: Check what topics are available now
+        logger.info(f"🔍 Checking available topics after progress update...")
+        _debug_student_topics(student)
+        
     except Exception as e:
+        logger.error(f"❌ Unexpected error in mark_training_progress: {str(e)}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         messages.error(request, f"Error updating progress: {str(e)}")
     
+    logger.info(f"🔄 Redirecting back to student training page")
     return redirect('student_training', record_pk=record_pk)
+
+
+def _debug_student_topics(student):
+    """Debug helper to log student's current topic status"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    from .models import StudentProgress, CurriculumLevel
+    
+    logger.info(f"📊 DEBUG - Student {student.first_name} topic status:")
+    
+    # Check all progress records
+    all_progress = StudentProgress.objects.filter(student=student).select_related('topic__level')
+    logger.info(f"📊 Total progress records: {all_progress.count()}")
+    
+    for progress in all_progress:
+        logger.info(f"   - {progress.topic.name}: {progress.status} (Level: {progress.topic.level.name})")
+    
+    # Check available topics in foundation level
+    try:
+        foundation = CurriculumLevel.objects.get(name='FOUNDATION')
+        foundation_topics = foundation.topics.filter(is_active=True).order_by('sort_order')
+        logger.info(f"📊 Total foundation topics available: {foundation_topics.count()}")
+        
+        for topic in foundation_topics:
+            try:
+                progress = StudentProgress.objects.get(student=student, topic=topic)
+                status = progress.status
+            except StudentProgress.DoesNotExist:
+                status = "NOT_STARTED (no record)"
+            logger.info(f"   - {topic.name} (order: {topic.sort_order}): {status}")
+            
+    except CurriculumLevel.DoesNotExist:
+        logger.error(f"❌ Foundation level not found!")
 
 
 def _initialize_student_progress(student):
@@ -2063,53 +2153,97 @@ def _calculate_student_level_and_elo(student):
 
 
 def _get_current_topic_for_student(student, current_level):
-    """Get the next topic the student should work on"""
-    from .models import StudentProgress, TopicPrerequisite
+    """Get the next topic the student should work on - ENHANCED with debugging"""
+    import logging
+    from .models import StudentProgress, TopicPrerequisite, CurriculumLevel
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"🔍 TOPIC FINDER: Finding current topic for {student.first_name}")
     
     if not current_level:
-        return None
+        logger.warning(f"⚠️ No current level provided")
+        # Try to get the foundation level as fallback
+        try:
+            current_level = CurriculumLevel.objects.get(name='FOUNDATION')
+            logger.info(f"📚 Using foundation level as fallback")
+        except CurriculumLevel.DoesNotExist:
+            logger.error(f"❌ No foundation level found")
+            return None
     
-    # Get all topics for current level
+    logger.info(f"📚 Current level: {current_level.name}")
+    
+    # Get all topics for current level, ordered by sort_order
     level_topics = current_level.topics.filter(is_active=True).order_by('sort_order')
+    logger.info(f"📖 Found {level_topics.count()} topics in {current_level.name} level")
     
     for topic in level_topics:
+        logger.info(f"   🔍 Checking topic: {topic.name} (order: {topic.sort_order})")
+        
         # Check if student has already mastered this topic
         try:
             progress = StudentProgress.objects.get(student=student, topic=topic)
+            logger.info(f"      📊 Found progress: {progress.status}")
             if progress.status == StudentProgress.Status.MASTERED:
+                logger.info(f"      ✅ Topic already mastered, skipping")
                 continue  # Skip mastered topics
+            elif progress.status in [StudentProgress.Status.IN_PROGRESS, StudentProgress.Status.NEEDS_REVIEW]:
+                logger.info(f"      🎯 Topic in progress/needs review - returning this topic")
+                return topic  # Continue with in-progress topics
         except StudentProgress.DoesNotExist:
-            pass
+            logger.info(f"      📋 No progress record found - new topic")
         
         # Check if prerequisites are met
         prerequisites = TopicPrerequisite.objects.filter(required_for=topic)
+        logger.info(f"      🔗 Found {prerequisites.count()} prerequisites")
+        
         prerequisites_met = True
         
         for prereq in prerequisites:
+            logger.info(f"         🔗 Checking prerequisite: {prereq.prerequisite.name}")
             try:
                 prereq_progress = StudentProgress.objects.get(
                     student=student, 
                     topic=prereq.prerequisite
                 )
                 if prereq.is_strict and prereq_progress.status != StudentProgress.Status.MASTERED:
+                    logger.info(f"         ❌ Strict prerequisite not mastered: {prereq.prerequisite.name} ({prereq_progress.status})")
                     prerequisites_met = False
                     break
+                else:
+                    logger.info(f"         ✅ Prerequisite met: {prereq.prerequisite.name}")
             except StudentProgress.DoesNotExist:
                 if prereq.is_strict:
+                    logger.info(f"         ❌ Strict prerequisite has no progress record: {prereq.prerequisite.name}")
                     prerequisites_met = False
                     break
+                else:
+                    logger.info(f"         ⚠️ Optional prerequisite has no progress record: {prereq.prerequisite.name}")
         
         if prerequisites_met:
+            logger.info(f"      🎯 All prerequisites met - returning topic: {topic.name}")
             return topic
+        else:
+            logger.info(f"      ❌ Prerequisites not met for topic: {topic.name}")
     
     # If all topics in current level are mastered, get first topic from next level
+    logger.info(f"📚 All topics in {current_level.name} completed/blocked, checking next level...")
+    
     next_level = CurriculumLevel.objects.filter(
         sort_order__gt=current_level.sort_order
     ).order_by('sort_order').first()
     
     if next_level:
-        return next_level.topics.filter(is_active=True).order_by('sort_order').first()
+        logger.info(f"📚 Found next level: {next_level.name}")
+        next_level_topic = next_level.topics.filter(is_active=True).order_by('sort_order').first()
+        if next_level_topic:
+            logger.info(f"🎯 Found first topic in next level: {next_level_topic.name}")
+            return next_level_topic
+        else:
+            logger.warning(f"⚠️ No topics found in next level: {next_level.name}")
+    else:
+        logger.info(f"🏆 No next level found - student has completed all available levels!")
     
+    logger.warning(f"❌ No current topic found for student {student.first_name}")
     return None
 
 
