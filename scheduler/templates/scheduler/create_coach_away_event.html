@@ -1,0 +1,239 @@
+{% extends "scheduler/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h3 class="card-title mb-0">
+                                <i class="bi bi-person-x me-2 text-warning"></i>{{ event_type }}
+                            </h3>
+                            <small class="text-muted">{{ description }}</small>
+                        </div>
+                        <a href="{% url 'event-management-dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-arrow-left me-1"></i>Back to Events
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <form method="post" id="coach-away-form">
+                        {% csrf_token %}
+                        
+                        <!-- Coach Selection -->
+                        <div class="mb-4">
+                            <label for="{{ form.coaches.id_for_label }}" class="form-label fw-bold">
+                                <i class="bi bi-people me-1 text-primary"></i>{{ form.coaches.label }}
+                            </label>
+                            <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                                {% for choice in form.coaches %}
+                                    <div class="form-check">
+                                        {{ choice.tag }}
+                                        <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                            {{ choice.choice_label }}
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            {% if form.coaches.errors %}
+                                <div class="text-danger small">{{ form.coaches.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Date Selection -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.event_date.id_for_label }}" class="form-label fw-bold">
+                                    <i class="bi bi-calendar me-1 text-primary"></i>{{ form.event_date.label }}
+                                </label>
+                                {{ form.event_date }}
+                                {% if form.event_date.errors %}
+                                    <div class="text-danger small">{{ form.event_date.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.end_date.id_for_label }}" class="form-label fw-bold">
+                                    <i class="bi bi-calendar-range me-1 text-primary"></i>{{ form.end_date.label }}
+                                </label>
+                                {{ form.end_date }}
+                                <div class="form-text">{{ form.end_date.help_text }}</div>
+                                {% if form.end_date.errors %}
+                                    <div class="text-danger small">{{ form.end_date.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Absence Reason Selection -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="bi bi-clipboard-pulse me-1 text-primary"></i>{{ form.absence_reason.label }}
+                            </label>
+                            <div class="mt-2">
+                                {% for choice in form.absence_reason %}
+                                    <div class="form-check">
+                                        {{ choice.tag }}
+                                        <label class="form-check-label" for="{{ choice.id_for_label }}">
+                                            <strong>{{ choice.choice_label }}</strong>
+                                            {% if choice.choice_value == 'COACH_SICK' %}
+                                                <small class="text-muted d-block">Coach is unwell and cannot attend lessons</small>
+                                            {% elif choice.choice_value == 'COACH_TOURNAMENT' %}
+                                                <small class="text-muted d-block">Coach is attending a chess tournament or competition</small>
+                                            {% endif %}
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="form-text">{{ form.absence_reason.help_text }}</div>
+                            {% if form.absence_reason.errors %}
+                                <div class="text-danger small">{{ form.absence_reason.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Time Slots (Optional) -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="bi bi-clock me-1 text-primary"></i>{{ form.time_slots.label }}
+                            </label>
+                            <div class="border rounded p-3" style="max-height: 150px; overflow-y: auto;">
+                                {% for choice in form.time_slots %}
+                                    <div class="form-check form-check-inline">
+                                        {{ choice.tag }}
+                                        <label class="form-check-label me-3" for="{{ choice.id_for_label }}">
+                                            {{ choice.choice_label }}
+                                        </label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="form-text">{{ form.time_slots.help_text }}</div>
+                            {% if form.time_slots.errors %}
+                                <div class="text-danger small">{{ form.time_slots.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Optional Fields -->
+                        <div class="mb-4">
+                            <label for="{{ form.event_name.id_for_label }}" class="form-label fw-bold">
+                                <i class="bi bi-tag me-1 text-secondary"></i>{{ form.event_name.label }}
+                            </label>
+                            {{ form.event_name }}
+                            {% if form.event_name.errors %}
+                                <div class="text-danger small">{{ form.event_name.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="{{ form.additional_reason.id_for_label }}" class="form-label fw-bold">
+                                <i class="bi bi-info-circle me-1 text-secondary"></i>{{ form.additional_reason.label }}
+                            </label>
+                            {{ form.additional_reason }}
+                            <div class="form-text">{{ form.additional_reason.help_text }}</div>
+                            {% if form.additional_reason.errors %}
+                                <div class="text-danger small">{{ form.additional_reason.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{% url 'event-management-dashboard' %}" class="btn btn-outline-secondary me-md-2">
+                                Cancel
+                            </a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-plus-circle me-1"></i>Create Coach Away Event
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Information Panel -->
+        <div class="col-lg-4">
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-info-circle me-2"></i>How It Works
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="fw-bold text-primary">🎯 Automatic Student Management</h6>
+                        <p class="small">Students affected by coach absence will be:</p>
+                        <ul class="small">
+                            <li>Automatically marked absent with the selected reason</li>
+                            <li>Made available as <strong>high-priority fill-in candidates</strong></li>
+                            <li>Shown at the top of fill-in lists for other lessons</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="fw-bold text-success">⭐ Priority System</h6>
+                        <p class="small">Coach-absent students will appear with special badges in fill-in lists:</p>
+                        <ul class="small">
+                            <li><span class="badge bg-success">Available - Coach at Tournament</span></li>
+                            <li><span class="badge bg-success">Available - Coach Sick</span></li>
+                            <li>Shows their original lesson details for context</li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="fw-bold text-warning">📅 Multi-Day Support</h6>
+                        <p class="small">For multi-day absences:</p>
+                        <ul class="small">
+                            <li>Separate events created for each day</li>
+                            <li>Students automatically managed across all days</li>
+                            <li>Easy tracking and management</li>
+                        </ul>
+                    </div>
+
+                    <div class="alert alert-info small">
+                        <i class="bi bi-lightbulb me-1"></i>
+                        <strong>Pro Tip:</strong> This system transforms coach absences into lesson balancing opportunities, helping students catch up while maximizing utilization!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Info -->
+            <div class="mt-3">
+                <div class="card border-secondary">
+                    <div class="card-header bg-light">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-eye me-1"></i>{{ preview_info }}
+                        </h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Form validation and preview logic could go here
+    const form = document.getElementById('coach-away-form');
+    const coachesCheckboxes = form.querySelectorAll('input[name="coaches"]');
+    const submitButton = form.querySelector('button[type="submit"]');
+    
+    function updateSubmitButton() {
+        const selectedCoaches = Array.from(coachesCheckboxes).filter(cb => cb.checked);
+        if (selectedCoaches.length > 0) {
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i class="bi bi-plus-circle me-1"></i>Create Coach Away Event';
+        } else {
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Select coaches first';
+        }
+    }
+    
+    // Add event listeners to coach checkboxes
+    coachesCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSubmitButton);
+    });
+    
+    // Initial check
+    updateSubmitButton();
+});
+</script>
+{% endblock %}

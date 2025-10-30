@@ -40,6 +40,7 @@ urlpatterns = [
     path('events/create/camp/', event_views.create_camp_event, name='create-camp-event'),
     path('events/create/excursion/', event_views.create_excursion_event, name='create-excursion-event'),
     path('events/create/individual/', event_views.create_individual_event, name='create-individual-event'),
+    path('events/create/coach-away/', event_views.create_coach_away_event, name='create-coach-away-event'),
     path('events/create/custom/', event_views.create_custom_event, name='create-custom-event'),
     path('events/<int:event_id>/', event_views.event_detail, name='event-detail'),
     path('events/<int:event_id>/delete/', event_views.delete_event, name='delete-event'),

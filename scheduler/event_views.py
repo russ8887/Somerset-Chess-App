@@ -10,7 +10,7 @@ import json
 from .models import OneOffEvent, Student, SchoolClass, TimeSlot, Coach
 from .event_forms import (
     PublicHolidayForm, PupilFreeDayForm, CampEventForm, 
-    ExcursionEventForm, IndividualStudentEventForm, CustomEventForm
+    ExcursionEventForm, IndividualStudentEventForm, CoachAwayForm, CustomEventForm
 )
 from .views import head_coach_required  # Import the head_coach_required decorator
 
@@ -234,6 +234,56 @@ def create_individual_event(request):
     }
     
     return render(request, 'scheduler/create_individual_event.html', context)
+
+@head_coach_required
+def create_coach_away_event(request):
+    """Create a coach away event that automatically marks affected students absent"""
+    
+    if request.method == 'POST':
+        form = CoachAwayForm(request.POST)
+        if form.is_valid():
+            events = form.save()  # Returns list of events
+            
+            # Set created_by for all events if coach exists
+            try:
+                coach = Coach.objects.get(user=request.user)
+                for event in events:
+                    event.created_by = coach
+                    event.save()
+            except Coach.DoesNotExist:
+                pass
+            
+            # Calculate total affected students across all events
+            total_affected = sum(event.get_affected_students_count() for event in events)
+            coaches_names = ', '.join([str(coach) for coach in form.cleaned_data['coaches']])
+            
+            if len(events) == 1:
+                messages.success(
+                    request, 
+                    f'Coach Away event "{events[0].name}" created successfully! '
+                    f'{total_affected} students will be automatically marked absent. '
+                    f'They will become high-priority fill-in candidates for other lessons.'
+                )
+            else:
+                messages.success(
+                    request, 
+                    f'{len(events)} Coach Away events created successfully for {coaches_names}! '
+                    f'Approximately {total_affected} student absences will be automatically managed. '
+                    f'Affected students become high-priority fill-in candidates.'
+                )
+                
+            return redirect('event-management-dashboard')
+    else:
+        form = CoachAwayForm()
+    
+    context = {
+        'form': form,
+        'event_type': 'Coach Away',
+        'description': 'Mark coaches as away (sick/tournament) and automatically handle affected students.',
+        'preview_info': 'Students will be marked absent with appropriate reason and become fill-in candidates'
+    }
+    
+    return render(request, 'scheduler/create_coach_away_event.html', context)
 
 @head_coach_required
 def create_custom_event(request):

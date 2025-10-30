@@ -341,6 +341,195 @@ class IndividualStudentEventForm(forms.ModelForm):
         
         return instance
 
+class CoachAwayForm(forms.ModelForm):
+    """Form for creating coach away events"""
+    
+    ABSENCE_REASON_CHOICES = [
+        ('COACH_SICK', 'Coach Sick'),
+        ('COACH_TOURNAMENT', 'Coach at Tournament'),
+    ]
+    
+    coaches = forms.ModelMultipleChoiceField(
+        queryset=Coach.objects.all().select_related('user').order_by('user__first_name'),
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        label='Coaches Away'
+    )
+    
+    event_date = forms.DateField(
+        widget=forms.DateInput(attrs={
+            'type': 'date',
+            'class': 'form-control',
+            'min': date.today().isoformat()
+        }),
+        label='Date'
+    )
+    
+    end_date = forms.DateField(
+        widget=forms.DateInput(attrs={
+            'type': 'date',
+            'class': 'form-control',
+            'min': date.today().isoformat()
+        }),
+        required=False,
+        label='End Date (optional, for multi-day absences)',
+        help_text='Leave blank for single day absence'
+    )
+    
+    absence_reason = forms.ChoiceField(
+        choices=ABSENCE_REASON_CHOICES,
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        label='Absence Reason',
+        help_text='This reason will be applied to all affected students'
+    )
+    
+    time_slots = forms.ModelMultipleChoiceField(
+        queryset=TimeSlot.objects.all().order_by('start_time'),
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        required=False,
+        label='Time Slots Affected (leave blank for all-day)',
+        help_text='Select specific time slots, or leave blank to affect all lessons for selected coaches'
+    )
+    
+    event_name = forms.CharField(
+        max_length=100,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Event name will be auto-generated'
+        }),
+        label='Event Name (optional)'
+    )
+    
+    additional_reason = forms.CharField(
+        max_length=255,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g., State Championships, Regional Tournament'
+        }),
+        label='Additional Details (optional)',
+        help_text='Extra details about the absence'
+    )
+    
+    class Meta:
+        model = OneOffEvent
+        fields = ['coaches', 'event_date', 'end_date', 'absence_reason', 'time_slots', 'event_name', 'additional_reason']
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get('event_date')
+        end_date = cleaned_data.get('end_date')
+        
+        if start_date and end_date and end_date < start_date:
+            raise forms.ValidationError("End date must be after start date.")
+        
+        if start_date and end_date and (end_date - start_date).days > 30:
+            raise forms.ValidationError("Coach absence duration cannot exceed 30 days.")
+        
+        return cleaned_data
+    
+    def save(self, commit=True):
+        """Create coach away event and automatically find affected students"""
+        coaches = self.cleaned_data['coaches']
+        start_date = self.cleaned_data['event_date']
+        end_date = self.cleaned_data.get('end_date')
+        absence_reason = self.cleaned_data['absence_reason']
+        time_slots = self.cleaned_data.get('time_slots')
+        event_name = self.cleaned_data.get('event_name')
+        additional_reason = self.cleaned_data.get('additional_reason')
+        
+        # Auto-generate event name if not provided
+        if not event_name:
+            coach_names = ', '.join([str(coach) for coach in coaches])
+            reason_display = dict(self.ABSENCE_REASON_CHOICES)[absence_reason]
+            event_name = f"{reason_display} - {coach_names}"
+        
+        # Build reason string
+        reason = dict(self.ABSENCE_REASON_CHOICES)[absence_reason]
+        if additional_reason:
+            reason = f"{reason}: {additional_reason}"
+        
+        # Create single-day or multi-day events
+        if end_date and end_date != start_date:
+            # Multi-day event
+            events = []
+            current_date = start_date
+            day_count = 1
+            total_days = (end_date - start_date).days + 1
+            
+            while current_date <= end_date:
+                daily_event_name = f"{event_name} - Day {day_count}" if total_days > 1 else event_name
+                
+                event = OneOffEvent.objects.create(
+                    name=daily_event_name,
+                    event_type=OneOffEvent.EventType.COACH_AWAY,
+                    event_date=current_date,
+                    reason=reason
+                )
+                
+                # Set affected time slots
+                if time_slots:
+                    event.time_slots.set(time_slots)
+                
+                # Find and add affected students for this specific date and coaches
+                affected_students = self._get_affected_students(coaches, current_date, time_slots)
+                event.students.set(affected_students)
+                
+                events.append(event)
+                current_date += timedelta(days=1)
+                day_count += 1
+            
+            return events
+        else:
+            # Single-day event
+            event = OneOffEvent.objects.create(
+                name=event_name,
+                event_type=OneOffEvent.EventType.COACH_AWAY,
+                event_date=start_date,
+                reason=reason
+            )
+            
+            # Set affected time slots
+            if time_slots:
+                event.time_slots.set(time_slots)
+            
+            # Find and add affected students
+            affected_students = self._get_affected_students(coaches, start_date, time_slots)
+            event.students.set(affected_students)
+            
+            return [event]  # Return as list for consistency
+    
+    def _get_affected_students(self, coaches, event_date, time_slots):
+        """Find all students who have lessons with the specified coaches on the given date"""
+        from .models import LessonSession, Student
+        
+        # Find all lesson sessions for the specified coaches on this date
+        lesson_sessions = LessonSession.objects.filter(
+            scheduled_group__coach__in=coaches,
+            lesson_date=event_date
+        )
+        
+        # If specific time slots are specified, filter by those
+        if time_slots:
+            lesson_sessions = lesson_sessions.filter(
+                scheduled_group__time_slot__in=time_slots
+            )
+        
+        # Get all students from these lessons
+        affected_students = []
+        for session in lesson_sessions:
+            # Get students who are members of the group
+            group_students = Student.objects.filter(
+                enrollment__scheduledgroup=session.scheduled_group,
+                enrollment__is_active=True,
+                enrollment__term=session.scheduled_group.term
+            )
+            affected_students.extend(group_students)
+        
+        # Remove duplicates and return
+        return list(set(affected_students))
+
+
 class CustomEventForm(forms.ModelForm):
     """Form for creating fully custom events"""
     

@@ -438,6 +438,7 @@ class OneOffEvent(models.Model):
         CAMP = 'CAMP', 'Camp'
         EXCURSION = 'EXCURSION', 'Class Excursion'
         INDIVIDUAL = 'INDIVIDUAL', 'Individual Students'
+        COACH_AWAY = 'COACH_AWAY', 'Coach Away'
         CUSTOM = 'CUSTOM', 'Custom Event'
     
     name = models.CharField(max_length=200, help_text="e.g., Year 4 Camp, Public Holiday")
