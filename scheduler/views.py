@@ -505,8 +505,40 @@ def manage_lesson_view(request, lesson_pk):
             actual_lessons=Count('attendancerecord', filter=Q(attendancerecord__status__in=['PRESENT', 'FILL_IN', 'SICK_PRESENT', 'REFUSES_PRESENT']))
         )
 
-    # 3. Determine which of them are "suggested" (available and not busy)
-    # Get students with attendance records on this date
+    # 3. NEW: Find coach-absent students (high priority candidates)
+    coach_absent_reasons = ['COACH_TOURNAMENT', 'COACH_SICK', 'SPECIALIST_CLASS']
+    coach_absent_records = AttendanceRecord.objects.filter(
+        lesson_session__lesson_date=lesson.lesson_date,
+        status='ABSENT',
+        reason_for_absence__in=coach_absent_reasons
+    ).select_related(
+        'enrollment__student__school_class',
+        'lesson_session__scheduled_group__time_slot',
+        'lesson_session__scheduled_group__coach__user'
+    ).exclude(enrollment__student_id__in=present_student_ids)
+
+    # Build a map of coach-absent students with their context
+    coach_absent_map = {}
+    for record in coach_absent_records:
+        student_id = record.enrollment.student.id
+        
+        # Check if this coach-absent student can attend THIS lesson (no conflicts)
+        conflict_info = record.enrollment.student.has_scheduling_conflict(
+            lesson_day := lesson.lesson_date.weekday(),
+            lesson_timeslot := lesson.scheduled_group.time_slot
+        )
+        
+        # Only include if they don't have a scheduling conflict with THIS lesson
+        if not conflict_info['has_conflict']:
+            coach_absent_map[student_id] = {
+                'reason': record.get_reason_for_absence_display(),
+                'original_lesson_info': f"{record.lesson_session.scheduled_group.name}",
+                'original_coach': str(record.lesson_session.scheduled_group.coach) if record.lesson_session.scheduled_group.coach else 'No Coach',
+                'original_time_slot': str(record.lesson_session.scheduled_group.time_slot),
+                'is_coach_absent': True
+            }
+
+    # 4. Determine regular availability (students with attendance records on this date)
     busy_student_ids = AttendanceRecord.objects.filter(lesson_session__lesson_date=lesson.lesson_date).values_list('enrollment__student_id', flat=True)
     
     # FIXED: Also exclude students who are members of groups with lessons on this date
@@ -546,11 +578,31 @@ def manage_lesson_view(request, lesson_pk):
     
     non_suggested_ids = set(list(all_busy_student_ids) + list(unavailable_student_ids) + list(unavailable_class_student_ids) + list(event_blocked_student_ids))
 
-    # 4. Process each candidate and add calculated fields
+    # 5. Process each candidate and add calculated fields
     candidates_list = []
     for enrollment in all_candidates:
-        # Set availability status
-        enrollment.is_suggested = enrollment.student_id not in non_suggested_ids
+        # Check if this is a coach-absent student (high priority)
+        student_id = enrollment.student.id
+        is_coach_absent = student_id in coach_absent_map
+        
+        if is_coach_absent:
+            # High priority coach-absent candidate
+            enrollment.is_suggested = True  # Always suggested
+            enrollment.is_coach_absent = True
+            enrollment.coach_absent_reason = coach_absent_map[student_id]['reason']
+            enrollment.original_lesson_info = coach_absent_map[student_id]['original_lesson_info']
+            enrollment.original_coach = coach_absent_map[student_id]['original_coach']
+            enrollment.original_time_slot = coach_absent_map[student_id]['original_time_slot']
+            enrollment.priority_score = 1000  # Very high priority
+        else:
+            # Regular availability check
+            enrollment.is_suggested = enrollment.student_id not in non_suggested_ids
+            enrollment.is_coach_absent = False
+            enrollment.coach_absent_reason = None
+            enrollment.original_lesson_info = None
+            enrollment.original_coach = None
+            enrollment.original_time_slot = None
+            enrollment.priority_score = 0
         
         # Calculate lesson balance using the model method
         enrollment.effective_deficit = enrollment.get_lesson_balance()
@@ -566,8 +618,8 @@ def manage_lesson_view(request, lesson_pk):
             
         candidates_list.append(enrollment)
 
-    # 5. Sort by deficit (biggest deficit first), then by fewest actual lessons
-    candidates_list.sort(key=lambda e: (-e.effective_deficit, e.actual_lessons))
+    # 6. Sort by priority (coach-absent first), then by deficit, then by fewest actual lessons
+    candidates_list.sort(key=lambda e: (-e.priority_score, -e.effective_deficit, e.actual_lessons))
 
     # Get the list of students currently in the lesson for display
     # Separate PENDING records (problematic fill-ins) from active records

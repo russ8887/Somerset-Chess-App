@@ -600,6 +600,9 @@ class AttendanceRecord(models.Model):
         TEACHER_REFUSAL = 'TEACHER_REFUSAL', 'Teacher Refusal'
         CLASS_EVENT = 'CLASS_EVENT', 'Class Event'
         CLASS_EMPTY = 'CLASS_EMPTY', 'Class Empty'
+        COACH_TOURNAMENT = 'COACH_TOURNAMENT', 'Coach at Tournament'
+        COACH_SICK = 'COACH_SICK', 'Coach Sick'
+        SPECIALIST_CLASS = 'SPECIALIST_CLASS', 'Specialist Class'
         OTHER = 'OTHER', 'Other'
 
     # Using TextChoices here is a best practice for consistency

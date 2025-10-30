@@ -118,35 +118,69 @@
 
             <div class="list-group" id="student-list" style="max-height: 300px; overflow-y: auto;">
                 {% for enrollment in all_candidates %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center" 
+                    <div class="list-group-item d-flex justify-content-between align-items-center{% if enrollment.is_coach_absent %} border-success{% endif %}" 
                          data-is-suggested="{{ enrollment.is_suggested|yesno:'true,false' }}"
                          data-student-name="{{ enrollment.student|lower }}">
-                        <span>
-                            {{ enrollment.student }} - ({{ enrollment.get_enrollment_type_display }})
-                            {% if enrollment.is_suggested %}
-                                <span class="badge bg-success">Suggested</span>
-                            {% else %}
-                                <span class="badge bg-warning">Override</span>
-                            {% endif %}
-                            <span class="badge bg-{{ enrollment.progress_color|default:'secondary' }} ms-1">
-                                {{ enrollment.actual_lessons }} lessons
-                            </span>
-                            {% with balance_status=enrollment.get_balance_status %}
-                            <span class="badge bg-{{ balance_status.color }} ms-1" title="{{ balance_status.text }}">
-                                {% if enrollment.effective_deficit > 0 %}
-                                    Owes {{ enrollment.effective_deficit }}
-                                {% elif enrollment.effective_deficit < 0 %}
-                                    Credit {% widthratio enrollment.effective_deficit 1 -1 %}
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center">
+                                <strong class="me-2">{{ enrollment.student.first_name }} {{ enrollment.student.last_name }}</strong>
+                                
+                                <!-- Coach Absent Priority Badge -->
+                                {% if enrollment.is_coach_absent %}
+                                    <span class="badge bg-success me-2">
+                                        <i class="bi bi-star-fill me-1"></i>Available - {{ enrollment.coach_absent_reason }}
+                                    </span>
+                                {% elif enrollment.is_suggested %}
+                                    <span class="badge bg-info me-2">Available</span>
                                 {% else %}
-                                    Balanced
+                                    <span class="badge bg-warning text-dark me-2">Busy</span>
                                 {% endif %}
-                            </span>
-                            {% endwith %}
-                        </span>
-                        <form method="post" style="display: inline;">
+                                
+                                <!-- Progress Badge -->
+                                <span class="badge bg-{{ enrollment.progress_color|default:'secondary' }} me-2">
+                                    {{ enrollment.actual_lessons }} lessons
+                                </span>
+                                
+                                <!-- Lesson Balance Badge -->
+                                {% if enrollment.effective_deficit > 0 %}
+                                    <span class="badge bg-danger me-2" title="{{ enrollment.effective_deficit }} lessons owed">
+                                        Owes {{ enrollment.effective_deficit }}
+                                    </span>
+                                {% elif enrollment.effective_deficit < 0 %}
+                                    <span class="badge bg-success me-2" title="{% widthratio enrollment.effective_deficit 1 -1 %} lessons credit">
+                                        Credit {% widthratio enrollment.effective_deficit 1 -1 %}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-success me-2">On Target</span>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    {{ enrollment.student.school_class.name|default:"No Class" }} • 
+                                    Year {{ enrollment.student.year_level }} • 
+                                    {{ enrollment.student.get_skill_level_display }} • 
+                                    {{ enrollment.get_enrollment_type_display }}
+                                </small>
+                                
+                                <!-- Coach Absent Context Info -->
+                                {% if enrollment.is_coach_absent %}
+                                    <div class="small text-success mt-1">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        <strong>Usually:</strong> {{ enrollment.original_lesson_info }} 
+                                        <span class="text-muted">({{ enrollment.original_time_slot }} with {{ enrollment.original_coach }})</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <form method="post" class="d-inline ms-3">
                             {% csrf_token %}
                             <input type="hidden" name="add_enrollment_pk" value="{{ enrollment.pk }}">
-                            <button type="submit" class="btn btn-success btn-sm">Add</button>
+                            <button type="submit" class="btn btn-sm {% if enrollment.is_coach_absent %}btn-success{% else %}btn-primary{% endif %}">
+                                <i class="bi bi-plus-circle me-1"></i>
+                                {% if enrollment.is_coach_absent %}Add (High Priority){% else %}Add Fill-in{% endif %}
+                            </button>
                         </form>
                     </div>
                 {% empty %}
