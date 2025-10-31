@@ -183,15 +183,27 @@ class DashboardView(LoginRequiredMixin, ListView):
                             # Check if student is in this lesson
                             if enrollment in lesson.scheduled_group.members.all():
                                 # Map event types to appropriate absence reasons
-                                reason_mapping = {
-                                    'PUBLIC_HOLIDAY': 'CLASS_EVENT',
-                                    'PUPIL_FREE_DAY': 'CLASS_EVENT', 
-                                    'CAMP': 'CLASS_EVENT',
-                                    'EXCURSION': 'CLASS_EVENT',
-                                    'INDIVIDUAL': 'OTHER',
-                                    'CUSTOM': 'CLASS_EVENT'
-                                }
-                                
+                            reason_mapping = {
+                                'PUBLIC_HOLIDAY': 'CLASS_EVENT',
+                                'PUPIL_FREE_DAY': 'CLASS_EVENT', 
+                                'CAMP': 'CLASS_EVENT',
+                                'EXCURSION': 'CLASS_EVENT',
+                                'INDIVIDUAL': 'OTHER',
+                                'COACH_AWAY': None,  # Will be handled dynamically below
+                                'CUSTOM': 'CLASS_EVENT'
+                            }
+                            
+                            # Handle Coach Away events dynamically based on the specific reason
+                            if event.event_type == 'COACH_AWAY':
+                                # Extract the specific coach absence reason from the event reason field
+                                if 'Coach Sick' in event.reason:
+                                    absence_reason = 'COACH_SICK'
+                                elif 'Coach at Tournament' in event.reason:
+                                    absence_reason = 'COACH_TOURNAMENT'
+                                else:
+                                    # Fallback for other coach-related reasons
+                                    absence_reason = 'COACH_SICK'  # Default to COACH_SICK
+                            else:
                                 absence_reason = reason_mapping.get(event.event_type, 'CLASS_EVENT')
                                 
                                 # FIXED: Only create absence record if no record exists (respect manual overrides)
@@ -1848,21 +1860,24 @@ def add_extra_lesson(request):
             
             # Create a simple scheduled group for this extra lesson
             # We'll use a naming convention to identify these as extra lessons
-            group_name = f"Extra Lesson - {coach} - {time_slot}"
+            # Include day name to make each day's extra lesson unique
+            day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][lesson_date.weekday()]
+            group_name = f"Extra Lesson - {coach} - {day_name} {time_slot}"
             
-            # Get or create a scheduled group for this coach/time combination
+            # Get or create a scheduled group for this coach/time/day combination
             current_term = Term.get_active_term()
             if not current_term:
                 messages.error(request, "No active term found.")
                 return redirect('dashboard')
             
+            # FIXED: Include day_of_week in get_or_create to ensure each day gets its own group
             scheduled_group, created = ScheduledGroup.objects.get_or_create(
                 name=group_name,
                 coach=coach,
                 term=current_term,
                 time_slot=time_slot,
+                day_of_week=lesson_date.weekday(),  # This is the key fix!
                 defaults={
-                    'day_of_week': lesson_date.weekday(),
                     'group_type': 'GROUP',
                     'target_skill_level': 'B',
                     'max_capacity': 4
